@@ -18,7 +18,6 @@
   <div class="controls">
     <input type="file" id="imageLoader" accept="image/*">
     <div>- OR -</div>
-    <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
   </div>
 
   <!-- Calibration controls -->
@@ -48,6 +47,7 @@
     <button id="newCurveBtn">New Curve</button>
     <button id="resetBtn">Reset Current</button>
     <button id="exportCSVBtn">Export CSV</button>
+    <button id="flipVerticalBtn">Flip Image Vertically</button>
   </div>
 
   <div id="status">Ready to load image. Use file input or paste image.</div>
@@ -55,7 +55,9 @@
   <!-- Main sections: left for the p5 canvas, right for the Plotly chart -->
   <div class="main-sections">
     <!-- P5 Canvas Container -->
-    <div id="canvasContainer" style="flex: 1;">
+    <div id="canvasContainer" style="flex: 1; position: relative;">
+      <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
+      <!-- p5.js canvas will be injected here -->
       <div class="zoom-controls">
         <button id="zoomIn">+</button>
         <button id="zoomOut">-</button>

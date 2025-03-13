@@ -22,12 +22,21 @@ const canvasHeight = 600;
 let isPanning = false;
 let panStartX, panStartY;
 
+// New global flag to track vertical flip
+let flipVertical = false;
+
 function setup() {
   let canvas = createCanvas(canvasWidth, canvasHeight);
   canvas.parent('canvasContainer');
   background(220);
   noLoop(); // Manual redraw
   setupCanvasEvents(canvas);
+
+  // Add event listener for the flip button
+  document.getElementById('flipVerticalBtn').onclick = () => {
+    flipVertical = !flipVertical;
+    redrawCanvas();
+  };
 }
 
 function draw() {
@@ -163,7 +172,16 @@ function redrawCanvas() {
     push();
     translate(offsetX * zoomLevel, offsetY * zoomLevel);
     scale(zoomLevel);
-    image(img, 0, 0, img.width, img.height);
+    if (flipVertical) {
+      // Flip vertically: translate down by image height then scale Y by -1
+      push();
+      translate(0, img.height);
+      scale(1, -1);
+      image(img, 0, 0, img.width, img.height);
+      pop();
+    } else {
+      image(img, 0, 0, img.width, img.height);
+    }
     pop();
     if (origin) {
       drawPoint(origin.x, origin.y, 10, color(255, 0, 0));

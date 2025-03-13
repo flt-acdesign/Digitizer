@@ -22,7 +22,6 @@
   <div class="controls">
     <input type="file" id="imageLoader" accept="image/*">
     <div>- OR -</div>
-    <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
   </div>
 
   <!-- Calibration controls -->
@@ -52,6 +51,7 @@
     <button id="newCurveBtn">New Curve</button>
     <button id="resetBtn">Reset Current</button>
     <button id="exportCSVBtn">Export CSV</button>
+    <button id="flipVerticalBtn">Flip Image Vertically</button>
   </div>
 
   <div id="status">Ready to load image. Use file input or paste image.</div>
@@ -59,7 +59,9 @@
   <!-- Main sections: left for the p5 canvas, right for the Plotly chart -->
   <div class="main-sections">
     <!-- P5 Canvas Container -->
-    <div id="canvasContainer" style="flex: 1;">
+    <div id="canvasContainer" style="flex: 1; position: relative;">
+      <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
+      <!-- p5.js canvas will be injected here -->
       <div class="zoom-controls">
         <button id="zoomIn">+</button>
         <button id="zoomOut">-</button>
@@ -162,19 +164,24 @@
     font-weight: bold;
     margin-right: 5px;
   }
-  /* Paste area styling */
+  /* Paste area styling now for the digitizing area */
   #pasteArea {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     border: 2px dashed #aaa;
-    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    margin-bottom: 15px;
+    background-color: rgba(250, 250, 250, 0.8);
     cursor: pointer;
-    flex: 1;
-    min-width: 200px;
-    max-width: 250px;
+    z-index: 50;
   }
   #pasteArea:hover {
-    background-color: #fafafa;
+    background-color: rgba(250, 250, 250, 0.9);
   }
   /* Canvas container */
   #canvasContainer {
@@ -190,7 +197,7 @@
     position: absolute;
     bottom: 10px;
     right: 10px;
-    background: rgba(255,255,255,0.7);
+    background: rgba(255, 255, 255, 0.7);
     padding: 5px;
     border-radius: 5px;
     z-index: 100;
@@ -212,7 +219,7 @@
     position: absolute;
     top: 10px;
     left: 10px;
-    background: rgba(255,255,255,0.7);
+    background: rgba(255, 255, 255, 0.7);
     padding: 5px;
     border-radius: 5px;
     z-index: 100;
@@ -427,12 +434,21 @@ const canvasHeight = 600;
 let isPanning = false;
 let panStartX, panStartY;
 
+// New global flag to track vertical flip
+let flipVertical = false;
+
 function setup() {
   let canvas = createCanvas(canvasWidth, canvasHeight);
   canvas.parent('canvasContainer');
   background(220);
   noLoop(); // Manual redraw
   setupCanvasEvents(canvas);
+
+  // Add event listener for the flip button
+  document.getElementById('flipVerticalBtn').onclick = () => {
+    flipVertical = !flipVertical;
+    redrawCanvas();
+  };
 }
 
 function draw() {
@@ -568,7 +584,16 @@ function redrawCanvas() {
     push();
     translate(offsetX * zoomLevel, offsetY * zoomLevel);
     scale(zoomLevel);
-    image(img, 0, 0, img.width, img.height);
+    if (flipVertical) {
+      // Flip vertically: translate down by image height then scale Y by -1
+      push();
+      translate(0, img.height);
+      scale(1, -1);
+      image(img, 0, 0, img.width, img.height);
+      pop();
+    } else {
+      image(img, 0, 0, img.width, img.height);
+    }
     pop();
     if (origin) {
       drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
@@ -779,6 +804,8 @@ function loadImageFromFile(file) {
   function loadImageData(data) {
     loadImage(data, (loadedImg) => {
       img = loadedImg;
+      // Hide the paste area once an image is loaded.
+      document.getElementById('pasteArea').style.display = 'none';
       resetView();
       redrawCanvas();
       updateStatus("Image loaded. Set origin point first.");
@@ -834,6 +861,7 @@ function loadImageFromFile(file) {
     updateStatus(`Hold CTRL key and click to add data points for "${currentCurveName}" in dataset "${currentDatasetName}"`);
   };
   
+  // Restoring the functionality of New Curve, Reset Current, and Export CSV buttons
   document.getElementById('newCurveBtn').onclick = createNewCurve;
   document.getElementById('resetBtn').onclick = () => {
     currentData = [];
