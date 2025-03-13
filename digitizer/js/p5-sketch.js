@@ -44,13 +44,12 @@ function draw() {
 }
 
 function mouseMoved() {
-  if (img && !isSelecting && !isPanning) {
+  if (img && !isPanning) {
     redrawCanvas();
   }
 }
 
 function mousePressed() {
-  if (isSelecting) return;
   if (!img) return;
 
   if (mouseButton === LEFT) {
@@ -208,7 +207,6 @@ function redrawCanvas() {
 function setupCanvasEvents(canvas) {
   // Mouse wheel zoom
   canvas.canvas.addEventListener('wheel', function(event) {
-    if (isSelecting) return;
     event.preventDefault();
     const rect = this.getBoundingClientRect();
     const mouseXOnCanvas = event.clientX - rect.left;
@@ -255,4 +253,25 @@ function setupCanvasEvents(canvas) {
   canvas.canvas.addEventListener('contextmenu', function(event) {
     event.preventDefault();
   });
+}
+
+function resetView() {
+  if (img) {
+    const imgRatio = img.width / img.height;
+    const canvasRatio = canvasWidth / canvasHeight;
+    let fitScale;
+    if (imgRatio > canvasRatio) {
+      fitScale = (canvasWidth / img.width) * 0.9;
+    } else {
+      fitScale = (canvasHeight / img.height) * 0.9;
+    }
+    zoomLevel = fitScale;
+    offsetX = (canvasWidth / zoomLevel - img.width) / 2;
+    offsetY = (canvasHeight / zoomLevel - img.height) / 2;
+  } else {
+    zoomLevel = 1;
+    offsetX = 0;
+    offsetY = 0;
+  }
+  redrawCanvas();
 }

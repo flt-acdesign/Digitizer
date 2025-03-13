@@ -11,6 +11,12 @@ function loadImageFromFile(file) {
     currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
     document.getElementById('curveName').value = currentCurveName;
     
+    // Add color picker dialog for the first curve
+    const colorInput = prompt("Enter a color for the curve (hex code or color name):", currentDatasetColor);
+    if (colorInput !== null) {
+      currentDatasetColor = colorInput;
+    }
+    
     if (currentData.length > 0) {
       dataSets.push({
         datasetName: currentDatasetName,
@@ -99,6 +105,54 @@ function loadImageFromFile(file) {
     updateStatus(`Hold CTRL key and click to add data points for "${currentCurveName}" in dataset "${currentDatasetName}"`);
   };
   
+  // Modified createNewCurve function with color selection
+  function createNewCurve() {
+    if (currentData.length > 0) {
+      dataSets.push({
+        datasetName: currentDatasetName,
+        name: currentCurveName,
+        color: currentDatasetColor,
+        data: [...currentData]
+      });
+      currentData = [];
+      const curveNameInput = prompt("Enter a name for the new curve:", `Curve ${curveCounter + 1}`);
+      if (curveNameInput === null) {
+        dataSets.pop();
+        currentData = dataSets[dataSets.length - 1].data;
+        return;
+      }
+      
+      // Add color picker dialog for the new curve
+      const colorInput = prompt("Enter a color for the curve (hex code or color name):", getRandomColor());
+      if (colorInput === null) {
+        dataSets.pop();
+        currentData = dataSets[dataSets.length - 1].data;
+        return;
+      }
+      
+      curveCounter++;
+      currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
+      document.getElementById('curveName').value = currentCurveName;
+      currentDatasetColor = colorInput || getRandomColor();
+      updateStatus(`Started new curve: ${currentCurveName} in dataset: ${currentDatasetName}`);
+      updateCurveIndicator();
+      redrawCanvas();
+      updateLiveResults();
+    } else {
+      currentDatasetName = document.getElementById('datasetName').value;
+      currentCurveName = document.getElementById('curveName').value;
+      
+      // Allow color selection even when no points yet
+      const colorInput = prompt("Enter a color for the curve (hex code or color name):", currentDatasetColor);
+      if (colorInput !== null) {
+        currentDatasetColor = colorInput;
+      }
+      
+      updateCurveIndicator();
+      updateStatus(`Ready to digitize: ${currentCurveName} in dataset: ${currentDatasetName}`);
+    }
+  }
+  
   // Restoring the functionality of New Curve, Reset Current, and Export CSV buttons
   document.getElementById('newCurveBtn').onclick = createNewCurve;
   document.getElementById('resetBtn').onclick = () => {
@@ -119,18 +173,6 @@ function loadImageFromFile(file) {
     updateCurveIndicator();
   });
   
-  document.getElementById('zoomIn').onclick = () => {
-    zoomLevel *= 1.2;
-    redrawCanvas();
-  };
-  document.getElementById('zoomOut').onclick = () => {
-    zoomLevel /= 1.2;
-    redrawCanvas();
-  };
-  document.getElementById('resetZoom').onclick = () => {
-    resetView();
-  };
-  
   // Helper Functions for UI Updates
   function updateStatus(message) {
     document.getElementById('status').textContent = message;
@@ -142,4 +184,3 @@ function loadImageFromFile(file) {
     document.getElementById('curveColorDisplay').style.backgroundColor = currentDatasetColor;
     document.getElementById('pointCountDisplay').textContent = currentData.length;
   }
-  

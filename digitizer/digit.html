@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Digitize Experimental Data + Screen Capture</title>
+  <title>Digitize Experimental Data</title>
   <!-- External Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1>Digitize Experimental Data + Screen Capture</h1>
+  <h1>Digitize Experimental Data</h1>
 
   <!-- Controls for loading images -->
   <div class="controls">
@@ -58,11 +58,6 @@
     <div id="canvasContainer" style="flex: 1; position: relative;">
       <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
       <!-- p5.js canvas will be injected here -->
-      <div class="zoom-controls">
-        <button id="zoomIn">+</button>
-        <button id="zoomOut">-</button>
-        <button id="resetZoom">Reset View</button>
-      </div>
       <div id="currentCurveIndicator">
         <div>Dataset: <span id="datasetNameDisplay">Dataset 1</span></div>
         <div>Curve: <span id="curveNameDisplay">Curve 1</span></div>
@@ -73,21 +68,16 @@
       </div>
     </div>
 
-    <!-- Live Results Plot & screenshot preview -->
+    <!-- Live Results Plot -->
     <div id="liveResultsContainer">
       <div id="liveResultsPlot"></div>
-      <img id="screenshotPreview" alt="Screen Capture Preview">
     </div>
   </div>
-
-  <!-- Button for starting screenshot selection -->
-  <button id="start-selection-btn">Start Screenshot Selection</button>
 
   <!-- Include JavaScript files -->
   <script src="js/p5-sketch.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/dataProcessing.js"></script>
-  <script src="js/screenshot.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
