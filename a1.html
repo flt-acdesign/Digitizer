@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Digitize Experimental Data</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .controls {
+      margin-bottom: 15px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    button, input {
+      padding: 8px 12px;
+      margin-right: 5px;
+      cursor: pointer;
+    }
+    #canvasContainer {
+      position: relative;
+      border: 1px solid #ccc;
+      overflow: hidden;
+      margin-bottom: 20px;
+      height: 600px;
+    }
+    #status {
+      margin: 10px 0;
+      font-style: italic;
+    }
+    #pasteArea {
+      border: 2px dashed #aaa;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 15px;
+      cursor: pointer;
+    }
+    .zoom-controls {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(255,255,255,0.7);
+      padding: 5px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Digitize Experimental Data</h1>
+  
+  <div class="controls">
+    <input type="file" id="imageLoader" accept="image/*">
+    <div>- OR -</div>
+    <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
+  </div>
+  
+  <div class="controls">
+    <button id="setOriginBtn">Set Origin</button>
+    <button id="setXScaleBtn">Set X-Scale</button>
+    <input type="number" id="xScaleValue" placeholder="X unit value" value="1" step="any" style="width: 100px;">
+    <button id="setYScaleBtn">Set Y-Scale</button>
+    <input type="number" id="yScaleValue" placeholder="Y unit value" value="1" step="any" style="width: 100px;">
+    <button id="addPointBtn">Add Data Points</button>
+    <!-- "New Curve" saves the current curve and clears for a new one -->
+    <button id="nextImageBtn">New Curve</button>
+    <button id="showResultsBtn">Show Combined Results</button>
+    <button id="resetBtn">Reset Current</button>
+    <!-- This button now uses Plotly's downloadImage method -->
+    <button id="takeScreenshotBtn">Take Graph Screenshot</button>
+  </div>
+  
+  <div id="status">Ready to load image. Use file input or paste image.</div>
+  
+  <div id="canvasContainer">
+    <!-- Canvas will be created here by p5.js -->
+    <div class="zoom-controls">
+      <button id="zoomIn">+</button>
+      <button id="zoomOut">-</button>
+      <button id="resetZoom">Reset View</button>
+    </div>
+  </div>
+  
+  <div id="plot" style="width:100%;height:500px;"></div>
+  
+  <script>
+    // Global variables for image, calibration, and digitizing
+    let img;
+    let mode = "none";
+    let origin, xScalePoint, yScalePoint;
+    let scaleX, scaleY;
+    let dataSets = [];      // Array to store finished curves (each curve is an array of points)
+    let currentData = [];   // Points for current curve
+    let graphPlotted = false; // Flag to indicate if Plotly graph is displayed
+
+    // Zoom and pan variables
+    let zoomLevel = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    let isDragging = false;
+    let dragStartX, dragStartY;
+    const canvasWidth = 800;
+    const canvasHeight = 600;
+    
+    // Returns a color for a dataset based on its index
+    function getDatasetColor(index) {
+      const colors = [
+        color(255, 165, 0),  // Orange
+        color(0, 0, 255),    // Blue
+        color(0, 255, 0),    // Green
+        color(255, 0, 255),  // Magenta
+        color(0, 128, 128)   // Teal
+      ];
+      return colors[index % colors.length];
+    }
+    
+    function setup() {
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      canvas.parent('canvasContainer');
+      canvas.mousePressed(canvasMousePressed);
+      canvas.mouseReleased(canvasMouseReleased);
+      background(220);
+      
+      // Handle dragging for panning
+      canvas.mouseMoved(() => {
+        if (isDragging) {
+          offsetX += (mouseX - dragStartX) / zoomLevel;
+          offsetY += (mouseY - dragStartY) / zoomLevel;
+          dragStartX = mouseX;
+          dragStartY = mouseY;
+          redrawCanvas();
+        }
+      });
+      
+      // Add mousewheel event for zooming
+      document.querySelector('canvas').addEventListener('wheel', function(event) {
+        event.preventDefault();
+        const rect = document.querySelector('canvas').getBoundingClientRect();
+        const mouseXPos = event.clientX - rect.left;
+        const mouseYPos = event.clientY - rect.top;
+        // Position before zoom
+        const posXBefore = (mouseXPos / zoomLevel) - offsetX;
+        const posYBefore = (mouseYPos / zoomLevel) - offsetY;
+        if (event.deltaY < 0) {
+          zoomLevel *= 1.1;
+        } else {
+          zoomLevel /= 1.1;
+        }
+        zoomLevel = constrain(zoomLevel, 0.1, 10);
+        // Adjust offset to keep mouse position stable
+        const posXAfter = (mouseXPos / zoomLevel) - offsetX;
+        const posYAfter = (mouseYPos / zoomLevel) - offsetY;
+        offsetX += (posXAfter - posXBefore);
+        offsetY += (posYAfter - posYBefore);
+        redrawCanvas();
+      });
+    }
+    
+    function canvasMousePressed() {
+      // When not in a special mode, start dragging to pan
+      if (mode === "none") {
+        isDragging = true;
+        dragStartX = mouseX;
+        dragStartY = mouseY;
+        return;
+      }
+      
+      if (!img) return;
+      
+      // Convert screen coordinates to image coordinates
+      const imgX = (mouseX / zoomLevel) - offsetX;
+      const imgY = (mouseY / zoomLevel) - offsetY;
+      
+      if (mode === "origin") {
+        origin = createVector(imgX, imgY);
+        redrawCanvas();
+        drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
+        updateStatus("Origin set. Now set X-Scale.");
+        mode = "none";
+      } else if (mode === "xscale") {
+        if (!origin) {
+          updateStatus("Please set origin first!");
+          return;
+        }
+        xScalePoint = createVector(imgX, imgY);
+        redrawCanvas();
+        drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
+        drawLine(origin.x, origin.y, xScalePoint.x, xScalePoint.y, color(0, 255, 0));
+        drawPoint(xScalePoint.x, xScalePoint.y, 8, color(0, 255, 0));
+        const distPx = p5.Vector.dist(origin, xScalePoint);
+        const xUnitValue = parseFloat(document.getElementById('xScaleValue').value) || 1;
+        scaleX = xUnitValue / distPx;
+        updateStatus(X-Scale set to ${xUnitValue} units. Now set Y-Scale.);
+        mode = "none";
+      } else if (mode === "yscale") {
+        if (!origin) {
+          updateStatus("Please set origin first!");
+          return;
+        }
+        yScalePoint = createVector(imgX, imgY);
+        redrawCanvas();
+        drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
+        if (xScalePoint) {
+          drawLine(origin.x, origin.y, xScalePoint.x, xScalePoint.y, color(0, 255, 0));
+          drawPoint(xScalePoint.x, xScalePoint.y, 8, color(0, 255, 0));
+        }
+        drawLine(origin.x, origin.y, yScalePoint.x, yScalePoint.y, color(0, 0, 255));
+        drawPoint(yScalePoint.x, yScalePoint.y, 8, color(0, 0, 255));
+        const distPx = p5.Vector.dist(origin, yScalePoint);
+        const yUnitValue = parseFloat(document.getElementById('yScaleValue').value) || 1;
+        scaleY = yUnitValue / distPx;
+        updateStatus(Y-Scale set to ${yUnitValue} units. Ready to add data points.);
+        mode = "none";
+      } else if (mode === "addpoint") {
+        if (!origin || !scaleX || !scaleY) {
+          updateStatus("Please set origin and scales first!");
+          return;
+        }
+        // Draw point on canvas using the next dataset's color (based on number of saved curves)
+        drawPoint(imgX, imgY, 6, getDatasetColor(dataSets.length));
+        const dataX = (imgX - origin.x) * scaleX;
+        const dataY = (origin.y - imgY) * scaleY; // invert Y-axis for plot
+        currentData.push({ x: dataX, y: dataY });
+        updateStatus(Point added: (${dataX.toFixed(3)}, ${dataY.toFixed(3)}). Total in current curve: ${currentData.length});
+      }
+    }
+    
+    function canvasMouseReleased() {
+      isDragging = false;
+    }
+    
+    // Draw a point on the canvas taking zoom & pan into account.
+    function drawPoint(x, y, size, clr) {
+      push();
+      translate(offsetX * zoomLevel, offsetY * zoomLevel);
+      scale(zoomLevel);
+      fill(clr);
+      noStroke();
+      ellipse(x, y, size, size);
+      pop();
+    }
+    
+    // Draw a line on the canvas taking zoom & pan into account.
+    function drawLine(x1, y1, x2, y2, clr) {
+      push();
+      translate(offsetX * zoomLevel, offsetY * zoomLevel);
+      scale(zoomLevel);
+      stroke(clr);
+      strokeWeight(2);
+      line(x1, y1, x2, y2);
+      pop();
+    }
+    
+    // Draw a whole dataset (curve) with its points and connecting lines.
+    function drawDataset(dataset, clr) {
+      if (dataset.length === 0) return;
+      push();
+      translate(offsetX * zoomLevel, offsetY * zoomLevel);
+      scale(zoomLevel);
+      stroke(clr);
+      strokeWeight(2);
+      noFill();
+      beginShape();
+      for (let pt of dataset) {
+        const screenX = origin.x + pt.x / scaleX;
+        const screenY = origin.y - pt.y / scaleY;
+        vertex(screenX, screenY);
+      }
+      endShape();
+      
+      // Draw points
+      noStroke();
+      fill(clr);
+      for (let pt of dataset) {
+        const screenX = origin.x + pt.x / scaleX;
+        const screenY = origin.y - pt.y / scaleY;
+        ellipse(screenX, screenY, 6, 6);
+      }
+      pop();
+    }
+    
+    // Redraw the canvas: background, image, calibration markers, saved curves and current curve.
+    function redrawCanvas() {
+      background(220);
+      if (img) {
+        push();
+        translate(offsetX * zoomLevel, offsetY * zoomLevel);
+        scale(zoomLevel);
+        image(img, 0, 0, img.width, img.height);
+        pop();
+      }
+      if (origin) {
+        drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
+      }
+      if (origin && xScalePoint) {
+        drawLine(origin.x, origin.y, xScalePoint.x, xScalePoint.y, color(0, 255, 0));
+        drawPoint(xScalePoint.x, xScalePoint.y, 8, color(0, 255, 0));
+      }
+      if (origin && yScalePoint) {
+        drawLine(origin.x, origin.y, yScalePoint.x, yScalePoint.y, color(0, 0, 255));
+        drawPoint(yScalePoint.x, yScalePoint.y, 8, color(0, 0, 255));
+      }
+      // Draw previously saved curves
+      for (let i = 0; i < dataSets.length; i++) {
+        drawDataset(dataSets[i], getDatasetColor(i));
+      }
+      // Draw current curve in progress (using next dataset's color)
+      drawDataset(currentData, getDatasetColor(dataSets.length));
+    }
+    
+    // Resets view parameters to center and fit the image.
+    function resetView() {
+      if (img) {
+        const imgRatio = img.width / img.height;
+        const canvasRatio = canvasWidth / canvasHeight;
+        let fitScale;
+        if (imgRatio > canvasRatio) {
+          fitScale = canvasWidth / img.width * 0.9;
+        } else {
+          fitScale = canvasHeight / img.height * 0.9;
+        }
+        zoomLevel = fitScale;
+        offsetX = (canvasWidth / zoomLevel - img.width) / 2;
+        offsetY = (canvasHeight / zoomLevel - img.height) / 2;
+      } else {
+        zoomLevel = 1;
+        offsetX = 0;
+        offsetY = 0;
+      }
+      redrawCanvas();
+    }
+    
+    function updateStatus(message) {
+      document.getElementById('status').textContent = message;
+    }
+    
+    // Load image from file input or pasted image.
+    function loadImageFromFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        loadImageData(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    function loadImageData(data) {
+      loadImage(data, (loadedImg) => {
+        img = loadedImg;
+        resetView();
+        redrawCanvas();
+        updateStatus("Image loaded. Set origin point first.");
+      });
+    }
+    
+    // File input event
+    document.getElementById('imageLoader').onchange = function(e) {
+      if (e.target.files.length > 0) {
+        loadImageFromFile(e.target.files[0]);
+      }
+    };
+    
+    // Paste functionality
+    const pasteArea = document.getElementById('pasteArea');
+    pasteArea.addEventListener('click', function() {
+      this.focus();
+      updateStatus("Paste image with Ctrl+V");
+    });
+    document.addEventListener('paste', function(e) {
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const blob = items[i].getAsFile();
+          loadImageFromFile(blob);
+          e.preventDefault();
+          return;
+        }
+      }
+      updateStatus("No image found in clipboard!");
+    });
+    
+    // Button event listeners for calibration and data point collection
+    document.getElementById('setOriginBtn').onclick = () => {
+      mode = "origin";
+      updateStatus("Click on the image to set the origin (0,0)");
+    };
+    document.getElementById('setXScaleBtn').onclick = () => {
+      mode = "xscale";
+      const xValue = document.getElementById('xScaleValue').value;
+      updateStatus(Click on the image to set X-Scale (${xValue} units from origin));
+    };
+    document.getElementById('setYScaleBtn').onclick = () => {
+      mode = "yscale";
+      const yValue = document.getElementById('yScaleValue').value;
+      updateStatus(Click on the image to set Y-Scale (${yValue} units from origin));
+    };
+    document.getElementById('addPointBtn').onclick = () => {
+      mode = "addpoint";
+      updateStatus("Click on the image to add data points to the current curve");
+    };
+    
+    // "New Curve" button saves the current curve (if any) and resets currentData.
+    document.getElementById('nextImageBtn').onclick = () => {
+      if (currentData.length === 0) {
+        updateStatus("No points in current curve to save.");
+        return;
+      }
+      dataSets.push([...currentData]);
+      currentData = [];
+      updateStatus(Curve ${dataSets.length} saved. Continue digitizing on the same image.);
+      redrawCanvas();
+    };
+    
+    // Plot the combined results with Plotly.
+    document.getElementById('showResultsBtn').onclick = () => {
+      // If there are unsaved points, add them as the last curve.
+      if (currentData.length > 0) {
+        dataSets.push([...currentData]);
+        currentData = [];
+        updateStatus(Final curve saved. Total curves: ${dataSets.length});
+      }
+      if (dataSets.length === 0) {
+        updateStatus("No data to display!");
+        return;
+      }
+      const plotData = dataSets.map((set, idx) => ({
+        x: set.map(pt => pt.x),
+        y: set.map(pt => pt.y),
+        mode: 'lines+markers',
+        name: Curve ${idx + 1}
+      }));
+      Plotly.newPlot('plot', plotData, {
+        title: 'Digitized Experimental Results',
+        xaxis: { title: 'X' },
+        yaxis: { title: 'Y' }
+      });
+      graphPlotted = true;
+      updateStatus(Plotted ${dataSets.length} curve(s).);
+    };
+    
+    // Reset current curve (without affecting calibration or saved curves).
+    document.getElementById('resetBtn').onclick = () => {
+      currentData = [];
+      redrawCanvas();
+      updateStatus("Current curve cleared. Calibration maintained.");
+    };
+    
+    // Zoom button controls
+    document.getElementById('zoomIn').onclick = () => {
+      zoomLevel *= 1.2;
+      redrawCanvas();
+    };
+    document.getElementById('zoomOut').onclick = () => {
+      zoomLevel /= 1.2;
+      redrawCanvas();
+    };
+    document.getElementById('resetZoom').onclick = () => {
+      resetView();
+    };
+    
+    // Graph screenshot functionality using Plotly.downloadImage.
+    document.getElementById('takeScreenshotBtn').onclick = () => {
+      if (!graphPlotted) {
+        updateStatus("No graph available to screenshot! Please plot the graph first.");
+        return;
+      }
+      Plotly.downloadImage(document.getElementById('plot'), {
+        format: 'png',
+        filename: 'digitized_graph'
+      })
+      .then(() => {
+        updateStatus("Graph screenshot saved!");
+      })
+      .catch(err => {
+        console.error("Screenshot error:", err);
+        updateStatus("Error saving graph screenshot.");
+      });
+    };
+  </script>
+</body>
+</html> 

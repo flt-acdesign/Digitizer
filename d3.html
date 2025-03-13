@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Data Digitizer</title>
+  <!-- Load p5.js for the drawing and interactivity -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.min.js"></script>
+  <!-- Load Plotly.js for the live chart -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
+    }
+
+    header {
+      background: #4a8dda;
+      color: #fff;
+      padding: 1em;
+      text-align: center;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: row;
+      padding: 1em;
+      gap: 1em;
+    }
+
+    /* Left panel for instructions, inputs, and status */
+    .left-panel {
+      flex: 1;
+      max-width: 350px;
+      background: #fff;
+      padding: 1em;
+      border-radius: 4px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+    }
+
+    .instructions-box {
+      background: #e7f0fa;
+      padding: 1em;
+      border-radius: 4px;
+    }
+
+    .status-area {
+      background: #f0f0f0;
+      padding: 0.5em;
+      min-height: 1.5em;
+      border-radius: 4px;
+    }
+
+    .controls-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+    }
+
+    label {
+      font-weight: bold;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.3em;
+    }
+
+    button {
+      cursor: pointer;
+      padding: 0.5em 1em;
+      margin-top: 0.2em;
+      border: none;
+      border-radius: 4px;
+      background: #4a8dda;
+      color: #fff;
+    }
+
+    button:hover {
+      background: #3774b8;
+    }
+
+    /* Right panel: p5 canvas and overlay */
+    .right-panel {
+      flex: 2;
+      position: relative;
+      background: #fff;
+      border-radius: 4px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.2);
+      overflow: hidden; /* in case we want to clip the canvas */
+    }
+
+    /* The p5 canvas is appended inside #canvas-container */
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: 500px; /* Adjust as needed */
+    }
+
+    /* Overlay info about current dataset/curve */
+    .overlay-info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.8);
+      padding: 0.5em;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    /* Plotly chart container */
+    #plotly-container {
+      margin-top: 1em;
+      background: #fff;
+      border-radius: 4px;
+      padding: 1em;
+      box-shadow: 0 0 8px rgba(0,0,0,0.2);
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>Experimental Data Digitizer</h1>
+</header>
+
+<div class="container">
+  <!-- Left Panel: Instructions, Inputs, Status, etc. -->
+  <div class="left-panel">
+    <!-- Instructions -->
+    <div class="instructions-box">
+      <ul>
+        <li>Load or paste image into the digitizing area.</li>
+        <li>Set origin, X-scale, and Y-scale.</li>
+        <li>Hold <strong>CTRL</strong> and click to add points.</li>
+        <li>Pan with <strong>right-click drag</strong>, zoom with mouse wheel.</li>
+        <li>Screenshot any part of the screen & paste it again.</li>
+        <li>Export/Import CSV for data reuse.</li>
+      </ul>
+    </div>
+
+    <!-- Status Area -->
+    <div class="status-area" id="statusArea">
+      Status: Ready.
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-group">
+      <label for="datasetName">Dataset Name</label>
+      <input type="text" id="datasetName" placeholder="Enter dataset name" />
+
+      <label for="curveName">Curve Name</label>
+      <input type="text" id="curveName" placeholder="Enter curve name" />
+
+      <!-- Set origin, x-scale, y-scale -->
+      <label>Calibration</label>
+      <button id="setOriginBtn">Set Origin</button>
+      <button id="setXScaleBtn">Set X-Scale</button>
+      <button id="setYScaleBtn">Set Y-Scale</button>
+      
+      <label for="xScaleValue">X-Scale Value</label>
+      <input type="number" step="any" id="xScaleValue" placeholder="units for X scale" />
+      
+      <label for="yScaleValue">Y-Scale Value</label>
+      <input type="number" step="any" id="yScaleValue" placeholder="units for Y scale" />
+
+      <label>Modes:</label>
+      <button id="addPointModeBtn">Add Point Mode</button>
+    </div>
+
+    <!-- CSV Import/Export -->
+    <div class="controls-group">
+      <button id="exportCsvBtn">Export CSV</button>
+      <button id="importCsvBtn">Import CSV</button>
+      <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
+    </div>
+
+    <!-- Screenshot button -->
+    <div class="controls-group">
+      <button id="screenshotBtn">Take Screenshot</button>
+    </div>
+  </div>
+
+  <!-- Right Panel: p5 Canvas and Overlay Info -->
+  <div class="right-panel">
+    <div id="canvas-container"></div>
+    <div class="overlay-info" id="overlayInfo">
+      <div><strong>Current Dataset:</strong> <span id="overlayDataset">N/A</span></div>
+      <div><strong>Current Curve:</strong> <span id="overlayCurve">N/A</span></div>
+      <div><strong>Points:</strong> <span id="overlayPointCount">0</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Plotly Chart -->
+<div id="plotly-container">
+  <div id="plotlyDiv" style="width:100%; height:300px;"></div>
+</div>
+
+
+<script>
+/***********************
+ * Global State
+ ***********************/
+let img = null;                 // loaded image
+let scaleFactor = 1;            // current zoom scale
+let offsetX = 0, offsetY = 0;   // current pan offsets
+let canvasWidth = 800;          // default canvas width
+let canvasHeight = 500;         // default canvas height
+
+// Calibration points in pixel space
+let originPixel = null; 
+let xScalePixel = null;
+let yScalePixel = null;
+
+// Actual scale values (user-defined)
+let xScaleValue = 1; 
+let yScaleValue = 1;
+
+// Current app mode
+let mode = "idle"; // can be "idle", "setOrigin", "setXScale", "setYScale", "addPoint"
+
+// Data structure: 
+// {
+//   datasetName: string,
+//   curveName: string,
+//   points: [ {x, y}, {x, y}, ... ],
+//   color: [R,G,B] // optional if you want different curve colors
+// }
+let datasets = [];
+let currentDataset = null; // reference to an object with the structure above
+
+/***********************
+ * p5 Setup & Drawing
+ ***********************/
+function setup() {
+  let canvas = createCanvas(canvasWidth, canvasHeight);
+  canvas.parent('canvas-container');
+
+  // By default, we can set no loop, or just call draw manually
+  // But we do want continuous draw for crosshair & panning
+  frameRate(60);
+}
+
+function draw() {
+  background(220);
+
+  push();
+  // Translate and scale to handle panning & zooming
+  translate(offsetX, offsetY);
+  scale(scaleFactor);
+
+  // Draw image if available
+  if (img) {
+    image(img, 0, 0);
+  }
+
+  // Draw calibration cross or other markers
+  stroke(255, 0, 0);
+  strokeWeight(2);
+
+  // If we have an origin
+  if (originPixel) {
+    let x = originPixel.x;
+    let y = originPixel.y;
+    line(x - 5, y, x + 5, y);
+    line(x, y - 5, x, y + 5);
+  }
+
+  // Draw all existing points
+  for (let ds of datasets) {
+    strokeWeight(8);
+    // choose color based on dataset or curve
+    // for simplicity, let's give each dataset a different color 
+    // or you might cycle through a color palette
+    let col = ds.color || [0, 0, 255];
+    stroke(col[0], col[1], col[2]);
+
+    for (let pt of ds.points) {
+      // Convert real-world to pixel coords
+      let pix = realToPixel(ds, pt.x, pt.y);
+      point(pix.x, pix.y);
+    }
+  }
+
+  pop();
+
+  // Draw crosshair if in calibration or point-adding mode
+  if (mode === "setOrigin" || mode === "setXScale" || mode === "setYScale" || mode === "addPoint") {
+    stroke(0);
+    strokeWeight(1);
+    let mx = mouseX;
+    let my = mouseY;
+    line(mx - 10, my, mx + 10, my);
+    line(mx, my - 10, mx, my + 10);
+  }
+}
+
+/***********************
+ * Event Handling
+ ***********************/
+
+// Right mouse drag -> pan
+function mouseDragged() {
+  // Right mouse button is typically event.button === 2
+  if (mouseButton === RIGHT) {
+    offsetX += movedX;
+    offsetY += movedY;
+  }
+}
+
+// Wheel -> zoom
+function mouseWheel(event) {
+  let zoomFactor = 1.05;
+  if (event.delta > 0) {
+    // zoom out
+    scaleFactor /= zoomFactor;
+  } else {
+    // zoom in
+    scaleFactor *= zoomFactor;
+  }
+  // Prevent default to stop page scroll
+  return false;
+}
+
+// Mouse clicked -> calibrations or add points
+function mousePressed() {
+  // Avoid left-click if we are panning with right-click
+  if (mouseButton === LEFT) {
+    // Check if ctrl is pressed for adding point
+    if (mode === "addPoint" && keyIsDown(CONTROL)) {
+      addPointAtMouse();
+    }
+    else if (mode === "setOrigin") {
+      setOriginAtMouse();
+    }
+    else if (mode === "setXScale") {
+      setXScaleAtMouse();
+    }
+    else if (mode === "setYScale") {
+      setYScaleAtMouse();
+    }
+  }
+}
+
+// Prevent context menu on right-click so we can pan
+document.oncontextmenu = function() { return false; };
+
+// Key pressed (optional for custom logic)
+function keyPressed() {
+  // Could handle extra shortcuts if desired
+}
+
+/***********************
+ * Calibration / Point Add
+ ***********************/
+
+// Convert mouse coords in canvas to pixel coords in the image's reference
+function getImagePixelCoords(mx, my) {
+  // Inverse of the transformations in draw()
+  let x = (mx - offsetX) / scaleFactor;
+  let y = (my - offsetY) / scaleFactor;
+  return { x, y };
+}
+
+function setOriginAtMouse() {
+  let pix = getImagePixelCoords(mouseX, mouseY);
+  originPixel = pix;
+  updateStatus("Origin set at pixel coords (" + pix.x.toFixed(1) + ", " + pix.y.toFixed(1) + ")");
+  mode = "idle";
+}
+
+function setXScaleAtMouse() {
+  let pix = getImagePixelCoords(mouseX, mouseY);
+  xScalePixel = pix;
+  let dx = xScalePixel.x - originPixel.x;
+  if (Math.abs(dx) < 1e-6) {
+    updateStatus("X-scale point cannot be vertical. Try again.");
+  } else {
+    updateStatus("X-scale point set. Enter scale value and confirm.");
+  }
+  mode = "idle";
+}
+
+function setYScaleAtMouse() {
+  let pix = getImagePixelCoords(mouseX, mouseY);
+  yScalePixel = pix;
+  let dy = yScalePixel.y - originPixel.y;
+  if (Math.abs(dy) < 1e-6) {
+    updateStatus("Y-scale point cannot be horizontal. Try again.");
+  } else {
+    updateStatus("Y-scale point set. Enter scale value and confirm.");
+  }
+  mode = "idle";
+}
+
+function addPointAtMouse() {
+  if (!currentDataset) {
+    createNewDatasetAndCurve();
+  }
+  let pix = getImagePixelCoords(mouseX, mouseY);
+  // Convert pixel coords to real coords using calibration
+  let rw = pixelToReal(pix.x, pix.y);
+  currentDataset.points.push({ x: rw.x, y: rw.y });
+  updateOverlayInfo();
+  updatePlotlyChart();
+}
+
+// Pixel->Real and Real->Pixel conversions
+function pixelToReal(px, py) {
+  if (!originPixel) return {x: px, y: py};
+  let dx = px - originPixel.x;
+  let dy = originPixel.y - py; // invert y because pixel y increases downward
+  // scale in X direction
+  let realX = 0;
+  let realY = 0;
+  
+  if (xScalePixel) {
+    let xDx = xScalePixel.x - originPixel.x;
+    realX = (dx / xDx) * xScaleValue;
+  } else {
+    realX = dx; // if not calibrated, 1:1
+  }
+
+  if (yScalePixel) {
+    let yDy = originPixel.y - yScalePixel.y; // invert for y
+    realY = (dy / yDy) * yScaleValue;
+  } else {
+    realY = dy; // if not calibrated, 1:1
+  }
+
+  return {x: realX, y: realY};
+}
+
+function realToPixel(ds, rx, ry) {
+  // We'll assume the same calibration as global
+  if (!originPixel) return {x: rx, y: ry};
+  // Reverse
+  let px = rx;
+  let py = ry;
+  
+  if (xScalePixel) {
+    let xDx = xScalePixel.x - originPixel.x;
+    px = (rx / xScaleValue) * xDx + originPixel.x;
+  }
+  if (yScalePixel) {
+    let yDy = originPixel.y - yScalePixel.y;
+    py = originPixel.y - (ry / yScaleValue) * yDy;
+  }
+
+  return {x: px, y: py};
+}
+
+/***********************
+ * Dataset/Curve Management
+ ***********************/
+function createNewDatasetAndCurve() {
+  let datasetNameInput = document.getElementById("datasetName");
+  let curveNameInput = document.getElementById("curveName");
+
+  let newDs = {
+    datasetName: datasetNameInput.value || "Untitled",
+    curveName: curveNameInput.value || "Curve",
+    points: [],
+    color: getRandomColor() // or define a color scheme
+  };
+  datasets.push(newDs);
+  currentDataset = newDs;
+  updateOverlayInfo();
+}
+
+function updateOverlayInfo() {
+  let dsSpan = document.getElementById("overlayDataset");
+  let curveSpan = document.getElementById("overlayCurve");
+  let pointCountSpan = document.getElementById("overlayPointCount");
+
+  if (currentDataset) {
+    dsSpan.textContent = currentDataset.datasetName;
+    curveSpan.textContent = currentDataset.curveName;
+    pointCountSpan.textContent = currentDataset.points.length;
+  } else {
+    dsSpan.textContent = "N/A";
+    curveSpan.textContent = "N/A";
+    pointCountSpan.textContent = "0";
+  }
+}
+
+/***********************
+ * Plotly Chart
+ ***********************/
+function updatePlotlyChart() {
+  // We'll create an array of traces from our datasets
+  let traces = [];
+  for (let ds of datasets) {
+    let xVals = ds.points.map(p => p.x);
+    let yVals = ds.points.map(p => p.y);
+    traces.push({
+      x: xVals,
+      y: yVals,
+      mode: 'markers+lines',
+      name: ds.datasetName + " - " + ds.curveName
+    });
+  }
+
+  let layout = {
+    margin: { t: 20 },
+    xaxis: { title: "X" },
+    yaxis: { title: "Y" }
+  };
+
+  Plotly.newPlot('plotlyDiv', traces, layout);
+}
+
+/***********************
+ * CSV Export / Import
+ ***********************/
+function exportCSV() {
+  let rows = [];
+  // header
+  rows.push(["Dataset Name", "Curve Name", "X", "Y"].join(","));
+
+  for (let ds of datasets) {
+    for (let pt of ds.points) {
+      rows.push([
+        ds.datasetName,
+        ds.curveName,
+        pt.x,
+        pt.y
+      ].join(","));
+    }
+  }
+
+  let csvContent = rows.join("\n");
+  let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  let url = URL.createObjectURL(blob);
+
+  let link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", "digitized_data.csv");
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function importCSV(file) {
+  let reader = new FileReader();
+  reader.onload = function(e) {
+    let text = e.target.result;
+    parseAndLoadCSV(text);
+  };
+  reader.readAsText(file);
+}
+
+// minimal CSV parsing
+function parseAndLoadCSV(csvText) {
+  let lines = csvText.split(/\r?\n/);
+  // first line is header
+  // format: "Dataset Name,Curve Name,X,Y"
+  datasets = []; // Clear existing or merge them if you prefer
+  let header = true;
+
+  for (let line of lines) {
+    if (header) {
+      header = false;
+      continue;
+    }
+    if (!line.trim()) continue; // skip empty
+    let parts = line.split(",");
+    let dsName = parts[0];
+    let curveName = parts[1];
+    let xVal = parseFloat(parts[2]);
+    let yVal = parseFloat(parts[3]);
+
+    // find or create dataset
+    let existing = datasets.find(d => d.datasetName === dsName && d.curveName === curveName);
+    if (!existing) {
+      existing = {
+        datasetName: dsName,
+        curveName: curveName,
+        points: [],
+        color: getRandomColor()
+      };
+      datasets.push(existing);
+    }
+    existing.points.push({ x: xVal, y: yVal });
+  }
+  // pick the last dataset as current
+  currentDataset = datasets[datasets.length - 1];
+  updateOverlayInfo();
+  updatePlotlyChart();
+}
+
+/***********************
+ * Screenshot to Clipboard
+ ***********************/
+async function takeScreenshot() {
+  // We'll grab the entire document.body or a specific element
+  // Then convert to a Blob or base64, and put it into the clipboard
+  try {
+    // Using the new API: html-to-image or canvas to blob approach
+    // For simplicity, let's just do a canvas snapshot (p5 canvas).
+    let c = document.querySelector('canvas');
+    let dataUrl = c.toDataURL("image/png");
+
+    // Convert DataURL to Blob
+    let res = await fetch(dataUrl);
+    let blob = await res.blob();
+
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        [blob.type]: blob
+      })
+    ]);
+    updateStatus("Screenshot copied to clipboard. You can now paste (Ctrl+V) into the digitizing area.");
+  } catch (err) {
+    console.error(err);
+    updateStatus("Error copying screenshot to clipboard: " + err);
+  }
+}
+
+/***********************
+ * Image Loading & Paste
+ ***********************/
+document.addEventListener('paste', (e) => {
+  // Look for items in the clipboard that are images
+  let items = e.clipboardData.items;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      let file = items[i].getAsFile();
+      loadImageFromFile(file);
+    }
+  }
+});
+
+// Also handle file input for images
+function loadImageFromFile(file) {
+  let reader = new FileReader();
+  reader.onload = function(e) {
+    let dataURL = e.target.result;
+    loadNewImage(dataURL);
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadNewImage(dataURL) {
+  loadImage(dataURL, (loaded) => {
+    img = loaded;
+    // reset offset, scale
+    offsetX = 0;
+    offsetY = 0;
+    scaleFactor = 1;
+
+    // clear calibration
+    originPixel = null;
+    xScalePixel = null;
+    yScalePixel = null;
+
+    // optionally: create a new dataset & curve
+    createNewDatasetAndCurve();
+    updatePlotlyChart();
+    updateStatus("Image loaded. Please set origin and scales as needed.");
+  });
+}
+
+/***********************
+ * Utility & UI
+ ***********************/
+function updateStatus(msg) {
+  document.getElementById("statusArea").textContent = "Status: " + msg;
+}
+
+function getRandomColor() {
+  // Simple random
+  let r = floor(random(50, 205));
+  let g = floor(random(50, 205));
+  let b = floor(random(50, 205));
+  return [r, g, b];
+}
+
+/***********************
+ * Button Event Listeners
+ ***********************/
+document.getElementById("setOriginBtn").addEventListener("click", () => {
+  mode = "setOrigin";
+  updateStatus("Click on the image to set origin.");
+});
+document.getElementById("setXScaleBtn").addEventListener("click", () => {
+  mode = "setXScale";
+  updateStatus("Click on the image (horizontal from origin) for X-scale.");
+});
+document.getElementById("setYScaleBtn").addEventListener("click", () => {
+  mode = "setYScale";
+  updateStatus("Click on the image (vertical from origin) for Y-scale.");
+});
+
+document.getElementById("xScaleValue").addEventListener("change", (e) => {
+  xScaleValue = parseFloat(e.target.value);
+  updateStatus("X-scale value updated to " + xScaleValue);
+});
+document.getElementById("yScaleValue").addEventListener("change", (e) => {
+  yScaleValue = parseFloat(e.target.value);
+  updateStatus("Y-scale value updated to " + yScaleValue);
+});
+
+document.getElementById("addPointModeBtn").addEventListener("click", () => {
+  mode = "addPoint";
+  updateStatus("Hold CTRL and left-click on the image to add points.");
+});
+
+document.getElementById("exportCsvBtn").addEventListener("click", exportCSV);
+document.getElementById("importCsvBtn").addEventListener("click", () => {
+  // trigger hidden file input
+  document.getElementById("csvFileInput").click();
+});
+document.getElementById("csvFileInput").addEventListener("change", (e) => {
+  let file = e.target.files[0];
+  if (file) {
+    importCSV(file);
+  }
+  e.target.value = null; // reset
+});
+
+document.getElementById("screenshotBtn").addEventListener("click", takeScreenshot);
+
+/***********************
+ * Image File Input
+ ***********************/
+document.addEventListener("dragover", function(e) {
+  e.preventDefault();
+});
+document.addEventListener("drop", function(e) {
+  e.preventDefault();
+  if (e.dataTransfer.files.length > 0) {
+    let file = e.dataTransfer.files[0];
+    if (file.type.startsWith("image/")) {
+      loadImageFromFile(file);
+    }
+  }
+});
+
+</script>
+</body>
+</html>

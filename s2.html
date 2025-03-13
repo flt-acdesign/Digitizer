@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Digitize Experimental Data</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .controls {
+      margin-bottom: 15px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    button, input {
+      padding: 8px 12px;
+      margin-right: 5px;
+      cursor: pointer;
+    }
+    #canvasContainer {
+      position: relative;
+      border: 1px solid #ccc;
+      overflow: hidden;
+      margin-bottom: 20px;
+      height: 600px;
+    }
+    #status {
+      margin: 10px 0;
+      font-style: italic;
+    }
+    /* Custom context menu for right-click on canvas */
+    #customMenu {
+      display: none;
+      position: absolute;
+      background: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 1500;
+    }
+    #customMenu div {
+      padding: 8px;
+      cursor: pointer;
+    }
+    #customMenu div:hover {
+      background: #eee;
+    }
+    /* Screen capture overlay (for external capture) */
+    #screenCaptureOverlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0,0,0,0.8);
+      z-index: 2000;
+      overflow: hidden;
+    }
+    #screenVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    #screenCaptureCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2100;
+      /* transparent so the video shows through */
+    }
+  </style>
+</head>
+<body>
+  <h1>Digitize Experimental Data</h1>
+  
+  <div class="controls">
+    <input type="file" id="imageLoader" accept="image/*">
+    <div>- OR -</div>
+    <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
+  </div>
+  
+  <div class="controls">
+    <button id="setOriginBtn">Set Origin</button>
+    <button id="setXScaleBtn">Set X-Scale</button>
+    <input type="number" id="xScaleValue" placeholder="X unit value" value="1" step="any" style="width: 100px;">
+    <button id="setYScaleBtn">Set Y-Scale</button>
+    <input type="number" id="yScaleValue" placeholder="Y unit value" value="1" step="any" style="width: 100px;">
+    <button id="addPointBtn">Add Data Points</button>
+    <button id="nextImageBtn">New Curve</button>
+    <button id="showResultsBtn">Show Combined Results</button>
+    <button id="resetBtn">Reset Current</button>
+    <button id="takeScreenshotBtn">Take Graph Screenshot</button>
+  </div>
+  
+  <div id="status">Ready to load image. Use file input, paste (Ctrl+V) or right-click for screen capture.</div>
+  
+  <div id="canvasContainer">
+    <!-- p5.js canvas will be created here -->
+    <div class="zoom-controls" style="position: absolute; bottom: 10px; right: 10px; background: rgba(255,255,255,0.7); padding: 5px; border-radius: 5px;">
+      <button id="zoomIn">+</button>
+      <button id="zoomOut">-</button>
+      <button id="resetZoom">Reset View</button>
+    </div>
+  </div>
+  
+  <!-- Custom context menu -->
+  <div id="customMenu">
+    <div id="captureScreenArea">Capture Screen Area</div>
+  </div>
+  
+  <!-- Screen capture overlay (hidden by default) -->
+  <div id="screenCaptureOverlay">
+    <video id="screenVideo" autoplay></video>
+    <canvas id="screenCaptureCanvas"></canvas>
+  </div>
+  
+  <script>
+    /********** Global Variables **********/
+    let img;
+    let mode = "none"; // modes: "none", "origin", "xscale", "yscale", "addpoint"
+    let origin, xScalePoint, yScalePoint;
+    let scaleX, scaleY;
+    let dataSets = [];
+    let currentData = [];
+    let datasetCounter = 1, curveCounter = 1;
+    let currentDatasetName = "Dataset 1", currentCurveName = "Curve 1", currentDatasetColor = "#FFA500";
+    
+    // p5.js canvas variables
+    let zoomLevel = 1, offsetX = 0, offsetY = 0, isDragging = false, dragStartX, dragStartY;
+    const canvasWidth = 800, canvasHeight = 600;
+    
+    /********** p5.js Setup **********/
+    function setup() {
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      canvas.parent('canvasContainer');
+      canvas.mousePressed(canvasMousePressed);
+      canvas.mouseReleased(canvasMouseReleased);
+      // Override default right-click on canvas to show our custom menu
+      canvas.elt.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showCustomMenu(e.clientX, e.clientY);
+      });
+      background(220);
+      
+      canvas.mouseMoved(() => {
+        if (isDragging) {
+          offsetX += (mouseX - dragStartX) / zoomLevel;
+          offsetY += (mouseY - dragStartY) / zoomLevel;
+          dragStartX = mouseX;
+          dragStartY = mouseY;
+          redrawCanvas();
+        } else {
+          redrawCanvas();
+        }
+      });
+      
+      canvas.elt.addEventListener('wheel', function(event) {
+        event.preventDefault();
+        const rect = canvas.elt.getBoundingClientRect();
+        const mouseXPos = event.clientX - rect.left;
+        const mouseYPos = event.clientY - rect.top;
+        const posXBefore = (mouseXPos / zoomLevel) - offsetX;
+        const posYBefore = (mouseYPos / zoomLevel) - offsetY;
+        zoomLevel = event.deltaY < 0 ? zoomLevel * 1.1 : zoomLevel / 1.1;
+        zoomLevel = constrain(zoomLevel, 0.1, 10);
+        const posXAfter = (mouseXPos / zoomLevel) - offsetX;
+        const posYAfter = (mouseYPos / zoomLevel) - offsetY;
+        offsetX += (posXAfter - posXBefore);
+        offsetY += (posYAfter - posYBefore);
+        redrawCanvas();
+      });
+    }
+    
+    function canvasMousePressed() {
+      // Left-click actions (when not using the context menu)
+      if (mouseButton !== LEFT) return;
+      if (!img) return;
+      
+      const imgX = (mouseX / zoomLevel) - offsetX;
+      const imgY = (mouseY / zoomLevel) - offsetY;
+      
+      if (mode === "origin") {
+        origin = createVector(imgX, imgY);
+        updateStatus("Origin set. Now set X-Scale.");
+        mode = "none";
+      } else if (mode === "xscale") {
+        if (!origin) { updateStatus("Set origin first!"); return; }
+        xScalePoint = createVector(imgX, origin.y); // restrict Y
+        const distPx = abs(xScalePoint.x - origin.x);
+        scaleX = (parseFloat(document.getElementById('xScaleValue').value) || 1) / distPx;
+        updateStatus("X-Scale set. Now set Y-Scale.");
+        mode = "none";
+      } else if (mode === "yscale") {
+        if (!origin) { updateStatus("Set origin first!"); return; }
+        yScalePoint = createVector(origin.x, imgY); // restrict X
+        const distPx = abs(yScalePoint.y - origin.y);
+        scaleY = (parseFloat(document.getElementById('yScaleValue').value) || 1) / distPx;
+        updateStatus("Y-Scale set. Ready to add data points.");
+        mode = "none";
+      } else if (mode === "addpoint") {
+        if (!origin || !scaleX || !scaleY) { updateStatus("Set origin and scales first!"); return; }
+        if (!keyIsDown(CONTROL)) { updateStatus("Hold CTRL while clicking to add a point"); return; }
+        const dataX = (imgX - origin.x) * scaleX;
+        const dataY = (origin.y - imgY) * scaleY;
+        currentData.push({ x: dataX, y: dataY });
+        updateStatus(`Point added: (${dataX.toFixed(3)}, ${dataY.toFixed(3)}). Total: ${currentData.length}`);
+      }
+      redrawCanvas();
+    }
+    
+    function canvasMouseReleased() {
+      isDragging = false;
+    }
+    
+    function drawPoint(x, y, size, clr) {
+      push();
+      translate(offsetX * zoomLevel, offsetY * zoomLevel);
+      scale(zoomLevel);
+      fill(clr);
+      noStroke();
+      ellipse(x, y, size, size);
+      pop();
+    }
+    
+    function drawLine(x1, y1, x2, y2, clr) {
+      push();
+      translate(offsetX * zoomLevel, offsetY * zoomLevel);
+      scale(zoomLevel);
+      stroke(clr);
+      strokeWeight(2);
+      line(x1, y1, x2, y2);
+      pop();
+    }
+    
+    function redrawCanvas() {
+      background(220);
+      if (img) {
+        push();
+        translate(offsetX * zoomLevel, offsetY * zoomLevel);
+        scale(zoomLevel);
+        image(img, 0, 0, img.width, img.height);
+        pop();
+      }
+      if (origin) drawPoint(origin.x, origin.y, 10, color(255,0,0));
+      if (origin && xScalePoint) {
+        drawLine(origin.x, origin.y, xScalePoint.x, xScalePoint.y, color(0,255,0));
+        drawPoint(xScalePoint.x, xScalePoint.y, 8, color(0,255,0));
+      }
+      if (origin && yScalePoint) {
+        drawLine(origin.x, origin.y, yScalePoint.x, yScalePoint.y, color(0,0,255));
+        drawPoint(yScalePoint.x, yScalePoint.y, 8, color(0,0,255));
+      }
+      // Draw current data points if calibrated
+      if (origin && scaleX && scaleY) {
+        noStroke();
+        fill(currentDatasetColor);
+        for (let pt of currentData) {
+          const sx = origin.x + pt.x / scaleX;
+          const sy = origin.y - pt.y / scaleY;
+          ellipse(sx, sy, 6, 6);
+        }
+      }
+    }
+    
+    function resetView() {
+      if (img) {
+        const imgRatio = img.width / img.height;
+        const canvasRatio = canvasWidth / canvasHeight;
+        let fitScale = (imgRatio > canvasRatio) ? canvasWidth / img.width * 0.9 : canvasHeight / img.height * 0.9;
+        zoomLevel = fitScale;
+        offsetX = (canvasWidth / zoomLevel - img.width) / 2;
+        offsetY = (canvasHeight / zoomLevel - img.height) / 2;
+      } else {
+        zoomLevel = 1; offsetX = 0; offsetY = 0;
+      }
+      redrawCanvas();
+    }
+    
+    function updateStatus(message) {
+      document.getElementById('status').textContent = message;
+    }
+    
+    function loadImageFromFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        loadImageData(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    function loadImageData(data) {
+      loadImage(data, (loadedImg) => {
+        img = loadedImg;
+        resetView();
+        redrawCanvas();
+        updateStatus("Image loaded. Set origin point first.");
+      });
+    }
+    
+    // File input and paste functionality
+    document.getElementById('imageLoader').onchange = function(e) {
+      if (e.target.files.length > 0) loadImageFromFile(e.target.files[0]);
+    };
+    const pasteArea = document.getElementById('pasteArea');
+    pasteArea.addEventListener('click', function() {
+      this.focus();
+      updateStatus("Paste image with Ctrl+V");
+    });
+    document.addEventListener('paste', function(e) {
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          loadImageFromFile(items[i].getAsFile());
+          e.preventDefault();
+          return;
+        }
+      }
+      updateStatus("No image found in clipboard!");
+    });
+    
+    /********** Button Event Listeners **********/
+    document.getElementById('setOriginBtn').onclick = () => { mode = "origin"; updateStatus("Click to set origin (0,0)"); };
+    document.getElementById('setXScaleBtn').onclick = () => { mode = "xscale"; updateStatus(`Click to set X-Scale (${document.getElementById('xScaleValue').value} units)`); };
+    document.getElementById('setYScaleBtn').onclick = () => { mode = "yscale"; updateStatus(`Click to set Y-Scale (${document.getElementById('yScaleValue').value} units)`); };
+    document.getElementById('addPointBtn').onclick = () => { mode = "addpoint"; updateStatus("Hold CTRL and click to add a point"); };
+    document.getElementById('nextImageBtn').onclick = () => {
+      if (currentData.length === 0) { updateStatus("No points in current curve to save."); return; }
+      dataSets.push([...currentData]);
+      currentData = [];
+      updateStatus(`Curve ${dataSets.length} saved. Continue digitizing on same image.`);
+      redrawCanvas();
+    };
+    document.getElementById('showResultsBtn').onclick = () => {
+      if (currentData.length > 0) {
+        dataSets.push([...currentData]);
+        currentData = [];
+        updateStatus(`Final curve saved. Total curves: ${dataSets.length}`);
+      }
+      if (dataSets.length === 0) { updateStatus("No data to display!"); return; }
+      const plotData = dataSets.map((set, idx) => ({
+        x: set.map(pt => pt.x),
+        y: set.map(pt => pt.y),
+        mode: 'lines+markers',
+        name: `Curve ${idx + 1}`
+      }));
+      Plotly.newPlot('plot', plotData, {
+        title: 'Digitized Experimental Results',
+        xaxis: { title: 'X' },
+        yaxis: { title: 'Y' }
+      });
+      updateStatus(`Plotted ${dataSets.length} curve(s).`);
+    };
+    document.getElementById('resetBtn').onclick = () => {
+      currentData = [];
+      redrawCanvas();
+      updateStatus("Current curve cleared. Calibration maintained.");
+    };
+    document.getElementById('takeScreenshotBtn').onclick = () => {
+      // This button uses Plotly's downloadImage (for graph capture)
+      // Not directly related to our screen capture for the digitizing image.
+      updateStatus("Graph screenshot functionality unchanged.");
+    };
+    document.getElementById('zoomIn').onclick = () => { zoomLevel *= 1.2; redrawCanvas(); };
+    document.getElementById('zoomOut').onclick = () => { zoomLevel /= 1.2; redrawCanvas(); };
+    document.getElementById('resetZoom').onclick = () => { resetView(); };
+    
+    /********** Custom Context Menu **********/
+    function showCustomMenu(x, y) {
+      const menu = document.getElementById('customMenu');
+      menu.style.left = x + "px";
+      menu.style.top = y + "px";
+      menu.style.display = "block";
+    }
+    document.addEventListener('click', function(e) {
+      document.getElementById('customMenu').style.display = "none";
+    });
+    document.getElementById('captureScreenArea').onclick = () => {
+      document.getElementById('customMenu').style.display = "none";
+      startScreenCapture();
+    };
+    
+    /********** Screen Capture Functionality **********/
+    async function startScreenCapture() {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const overlay = document.getElementById("screenCaptureOverlay");
+        overlay.style.display = "block";
+        const video = document.getElementById("screenVideo");
+        video.srcObject = stream;
+        await video.play();
+        const capCanvas = document.getElementById("screenCaptureCanvas");
+        capCanvas.width = overlay.clientWidth;
+        capCanvas.height = overlay.clientHeight;
+        const capCtx = capCanvas.getContext("2d");
+        capCtx.clearRect(0, 0, capCanvas.width, capCanvas.height);
+        updateStatus("Screen capture: drag on overlay to select a region.");
+      } catch (err) {
+        updateStatus("Screen capture failed: " + err);
+      }
+    }
+    
+    // Variables for selection on the overlay canvas
+    let screenSelect = false, screenSelectStart = { x: 0, y: 0 }, screenSelectEnd = { x: 0, y: 0 };
+    const screenCanvas = document.getElementById("screenCaptureCanvas");
+    
+    screenCanvas.addEventListener("mousedown", (e) => {
+      screenSelect = true;
+      const rect = screenCanvas.getBoundingClientRect();
+      screenSelectStart.x = e.clientX - rect.left;
+      screenSelectStart.y = e.clientY - rect.top;
+      screenSelectEnd = { ...screenSelectStart };
+    });
+    screenCanvas.addEventListener("mousemove", (e) => {
+      if (!screenSelect) return;
+      const rect = screenCanvas.getBoundingClientRect();
+      screenSelectEnd.x = e.clientX - rect.left;
+      screenSelectEnd.y = e.clientY - rect.top;
+      drawScreenSelection();
+    });
+    screenCanvas.addEventListener("mouseup", (e) => {
+      if (!screenSelect) return;
+      screenSelect = false;
+      captureSelectedRegion();
+    });
+    
+    function drawScreenSelection() {
+      const ctx = screenCanvas.getContext("2d");
+      ctx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+      ctx.strokeStyle = "red";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(
+        Math.min(screenSelectStart.x, screenSelectEnd.x),
+        Math.min(screenSelectStart.y, screenSelectEnd.y),
+        Math.abs(screenSelectEnd.x - screenSelectStart.x),
+        Math.abs(screenSelectEnd.y - screenSelectStart.y)
+      );
+    }
+    
+    function captureSelectedRegion() {
+      const overlay = document.getElementById("screenCaptureOverlay");
+      const video = document.getElementById("screenVideo");
+      const canvasElem = document.getElementById("screenCaptureCanvas");
+      
+      const selX = Math.min(screenSelectStart.x, screenSelectEnd.x);
+      const selY = Math.min(screenSelectStart.y, screenSelectEnd.y);
+      const selW = Math.abs(screenSelectEnd.x - screenSelectStart.x);
+      const selH = Math.abs(screenSelectEnd.y - screenSelectStart.y);
+      
+      // Calculate scale factors between overlay canvas and actual video dimensions
+      const scaleX = video.videoWidth / canvasElem.width;
+      const scaleY = video.videoHeight / canvasElem.height;
+      
+      const offCanvas = document.createElement("canvas");
+      offCanvas.width = selW * scaleX;
+      offCanvas.height = selH * scaleY;
+      const offCtx = offCanvas.getContext("2d");
+      offCtx.drawImage(video, selX * scaleX, selY * scaleY, selW * scaleX, selH * scaleY,
+                       0, 0, offCanvas.width, offCanvas.height);
+      const dataURL = offCanvas.toDataURL("image/png");
+      
+      // Stop screen capture
+      video.srcObject.getTracks().forEach(track => track.stop());
+      document.getElementById("screenCaptureOverlay").style.display = "none";
+      
+      // Automatically load the captured image into the digitizing area
+      loadImageData(dataURL);
+    }
+  </script>
+</body>
+</html>

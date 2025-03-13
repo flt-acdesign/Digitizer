@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Digitize Experimental Data + Screen Capture</title>
+  <!-- p5.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <!-- html2canvas -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    /* Basic reset & layout */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #FAFAFA;
+    }
+    h1 {
+      margin-bottom: 10px;
+      text-align: center;
+      font-weight: 600;
+      color: #333;
+    }
+
+    /* Instruction box */
+    .instructions {
+      background-color: #fefefe;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+    }
+    .instructions ul {
+      margin-left: 20px;
+    }
+
+    /* Controls styling */
+    .controls {
+      margin-bottom: 15px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    button,
+    input[type="file"],
+    input[type="number"],
+    input[type="text"],
+    input[type="color"] {
+      padding: 8px 12px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      font-size: 14px;
+      transition: background-color 0.2s, border-color 0.2s;
+    }
+    button:hover,
+    input[type="file"]:hover,
+    input[type="number"]:hover,
+    input[type="text"]:hover,
+    input[type="color"]:hover {
+      background-color: #f0f0f0;
+      border-color: #999;
+    }
+    label {
+      font-weight: bold;
+      margin-right: 5px;
+    }
+
+    /* Paste area styling */
+    #pasteArea {
+      border: 2px dashed #aaa;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 15px;
+      cursor: pointer;
+      flex: 1;
+      min-width: 200px;
+      max-width: 250px;
+    }
+    #pasteArea:hover {
+      background-color: #fafafa;
+    }
+
+    /* Canvas container */
+    #canvasContainer {
+      position: relative;
+      border: 1px solid #ccc;
+      overflow: hidden;
+      margin-bottom: 20px;
+      height: 600px;
+      background: #fafafa;
+    }
+    /* Zoom controls */
+    .zoom-controls {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(255,255,255,0.7);
+      padding: 5px;
+      border-radius: 5px;
+      z-index: 100;
+      display: flex;
+      gap: 5px;
+    }
+    /* Status area */
+    #status {
+      margin: 10px 0;
+      font-style: italic;
+      color: #555;
+      background-color: #f0f0f0;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    /* Current curve info box */
+    #currentCurveIndicator {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.7);
+      padding: 5px;
+      border-radius: 5px;
+      z-index: 100;
+    }
+    #currentCurveIndicator div {
+      margin-bottom: 4px;
+    }
+    /* The color display remains as an indicator */
+    #curveColorDisplay {
+      width: 15px;
+      height: 15px;
+      background: #FFA500;
+      margin-right: 5px;
+    }
+    /* Plot area */
+    #liveResultsContainer {
+      flex: 1;
+      max-width: 50%;
+    }
+    #liveResultsPlot {
+      width: 100%;
+      height: 600px;
+    }
+    /* Make the two main sections sit side by side */
+    .main-sections {
+      display: flex;
+      gap: 20px;
+    }
+
+    /* Selection box for screenshot */
+    .selection-box {
+      position: fixed;
+      border: 2px dashed #007bff;
+      background: rgba(0, 123, 255, 0.1);
+      pointer-events: none; 
+      z-index: 9999;
+    }
+    /* Screenshot preview */
+    #screenshotPreview {
+      margin-top: 20px;
+      max-width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Digitize Experimental Data + Screen Capture</h1>
+
+
+  <!-- Controls for loading images -->
+  <div class="controls">
+    <input type="file" id="imageLoader" accept="image/*">
+    <div>- OR -</div>
+    <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
+  </div>
+
+  <!-- Calibration controls -->
+  <div class="controls">
+    <button id="setOriginBtn">Set Origin</button>
+    <button id="setXScaleBtn">Set X-Scale</button>
+    <input type="number" id="xScaleValue" placeholder="X unit value" value="1" step="any" style="width: 100px;">
+    <button id="setYScaleBtn">Set Y-Scale</button>
+    <input type="number" id="yScaleValue" placeholder="Y unit value" value="1" step="any" style="width: 100px;">
+  </div>
+
+  <!-- Curve naming controls (Curve Color removed) -->
+  <div class="controls">
+    <div>
+      <label for="datasetName">Dataset Name:</label>
+      <input type="text" id="datasetName" placeholder="Dataset name" value="Dataset 1">
+    </div>
+    <div>
+      <label for="curveName">Curve Name:</label>
+      <input type="text" id="curveName" placeholder="Curve name" value="Curve 1">
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="controls">
+    <button id="addPointBtn">Add Data Points</button>
+    <button id="newCurveBtn">New Curve</button>
+    <button id="resetBtn">Reset Current</button>
+    <button id="exportCSVBtn">Export CSV</button>
+  </div>
+
+  <!-- Screenshot controls (Capture button removed) -->
+  <div class="controls">
+   
+  </div>
+
+  <div id="status">Ready to load image. Use file input or paste image.</div>
+
+  <!-- Main sections: left for the p5 canvas, right for the Plotly chart -->
+  <div class="main-sections">
+    <!-- P5 Canvas Container -->
+    <div id="canvasContainer" style="flex: 1;">
+      <!-- Canvas inserted by p5.js -->
+      <div class="zoom-controls">
+        <button id="zoomIn">+</button>
+        <button id="zoomOut">-</button>
+        <button id="resetZoom">Reset View</button>
+      </div>
+      <!-- Current curve info overlay -->
+      <div id="currentCurveIndicator">
+        <div>Dataset: <span id="datasetNameDisplay">Dataset 1</span></div>
+        <div>Curve: <span id="curveNameDisplay">Curve 1</span></div>
+        <div style="display: flex; align-items: center;">
+          <div id="curveColorDisplay"></div>
+          <div>Points: <span id="pointCountDisplay">0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Results Plot & screenshot preview -->
+    <div id="liveResultsContainer">
+      <div id="liveResultsPlot"></div>
+      <img id="screenshotPreview" alt="Screen Capture Preview">
+    </div>
+  </div>
+
+  <script>
+    /****************************************
+     *      P5.js + Digitizing Variables    *
+     ****************************************/
+    let img;
+    let mode = "none";
+    let origin, xScalePoint, yScalePoint;
+    let scaleX, scaleY;
+    let dataSets = [];
+    let currentData = [];
+    let currentDatasetName = "Dataset 1";
+    let currentCurveName = "Curve 1";
+    let currentDatasetColor = "#FFA500";
+    let datasetCounter = 1;
+    let curveCounter = 1;
+
+    // Zoom & pan variables
+    let zoomLevel = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    let canvasWidth = 800;
+    let canvasHeight = 600;
+
+    // Panning variables for right-click dragging
+    let isPanning = false;
+    let panStartX = 0;
+    let panStartY = 0;
+    let initialOffsetX = 0;
+    let initialOffsetY = 0;
+
+    /****************************************
+     *  Screenshot Selection Variables (#2) *
+     ****************************************/
+    let isSelecting = false;   // Are we in "area selection" mode?
+    let selectionBox = null;
+    let startX, startY, endX, endY;  // For drawing the dashed box
+
+    /****************************************
+     *          p5.js Setup & Draw          *
+     ****************************************/
+    function setup() {
+      let canvas = createCanvas(canvasWidth, canvasHeight);
+      canvas.parent('canvasContainer');
+      // Disable context menu on canvas to allow right-button panning
+      canvas.canvas.oncontextmenu = e => e.preventDefault();
+      background(220);
+      noLoop(); // We'll manually redraw when needed
+
+      // Mouse wheel for zoom
+      document.querySelector('canvas').addEventListener('wheel', function(event) {
+        if (isSelecting) return;
+        event.preventDefault();
+        const rect = this.getBoundingClientRect();
+        const mouseXOnCanvas = event.clientX - rect.left;
+        const mouseYOnCanvas = event.clientY - rect.top;
+        const posXBefore = (mouseXOnCanvas / zoomLevel) - offsetX;
+        const posYBefore = (mouseYOnCanvas / zoomLevel) - offsetY;
+
+        if (event.deltaY < 0) {
+          zoomLevel *= 1.1;
+        } else {
+          zoomLevel /= 1.1;
+        }
+        zoomLevel = constrain(zoomLevel, 0.1, 10);
+
+        const posXAfter = (mouseXOnCanvas / zoomLevel) - offsetX;
+        const posYAfter = (mouseYOnCanvas / zoomLevel) - offsetY;
+        offsetX += (posXAfter - posXBefore);
+        offsetY += (posYAfter - posYBefore);
+        redrawCanvas();
+      });
+    }
+
+    function draw() {
+      // p5 calls draw repeatedly; we use noLoop() and redraw manually.
+    }
+
+    function mousePressed() {
+      if (isSelecting) return;
+      if (!img) return;
+
+      // Right mouse button: start panning
+      if (mouseButton === RIGHT) {
+        isPanning = true;
+        panStartX = mouseX;
+        panStartY = mouseY;
+        initialOffsetX = offsetX;
+        initialOffsetY = offsetY;
+        return;
+      }
+
+      // Left mouse button: existing functionality
+      if (mouseButton === LEFT) {
+        const imgX = (mouseX / zoomLevel) - offsetX;
+        const imgY = (mouseY / zoomLevel) - offsetY;
+
+        if (mode === "origin") {
+          origin = createVector(imgX, imgY);
+          redrawCanvas();
+          drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
+          updateStatus("Origin set. Now set X-Scale.");
+          mode = "none";
+        }
+        else if (mode === "xscale") {
+          if (!origin) {
+            updateStatus("Please set origin first!");
+            return;
+          }
+          const restrictedY = origin.y;
+          xScalePoint = createVector(imgX, restrictedY);
+          redrawCanvas();
+          drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
+          drawLine(origin.x, origin.y, xScalePoint.x, xScalePoint.y, color(0, 255, 0));
+          drawPoint(xScalePoint.x, xScalePoint.y, 8, color(0, 255, 0));
+
+          let distPx = Math.abs(xScalePoint.x - origin.x);
+          const xUnitValue = parseFloat(document.getElementById('xScaleValue').value) || 1;
+          scaleX = xUnitValue / distPx;
+          updateStatus(`X-Scale set to ${xUnitValue} units. Now set Y-Scale.`);
+          mode = "none";
+        }
+        else if (mode === "yscale") {
+          if (!origin) {
+            updateStatus("Please set origin first!");
+            return;
+          }
+          const restrictedX = origin.x;
+          yScalePoint = createVector(restrictedX, imgY);
+          redrawCanvas();
+          drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
+          if (xScalePoint) {
+            drawLine(origin.x, origin.y, xScalePoint.x, xScalePoint.y, color(0, 255, 0));
+            drawPoint(xScalePoint.x, xScalePoint.y, 8, color(0, 255, 0));
+          }
+          drawLine(origin.x, origin.y, yScalePoint.x, yScalePoint.y, color(0, 0, 255));
+          drawPoint(yScalePoint.x, yScalePoint.y, 8, color(0, 0, 255));
+
+          let distPx = Math.abs(yScalePoint.y - origin.y);
+          const yUnitValue = parseFloat(document.getElementById('yScaleValue').value) || 1;
+          scaleY = yUnitValue / distPx;
+          updateStatus(`Y-Scale set to ${yUnitValue} units. Ready to add data points.`);
+          mode = "none";
+        }
+        else if (mode === "addpoint") {
+          if (!origin || !scaleX || !scaleY) {
+            updateStatus("Please set origin and scales first!");
+            return;
+          }
+          // Must hold CTRL to add points
+          if (!keyIsDown(CONTROL)) {
+            updateStatus("Hold CTRL key while clicking to add a data point");
+            return;
+          }
+          drawPoint(imgX, imgY, 6, color(currentDatasetColor));
+          let dataX = (imgX - origin.x) * scaleX;
+          let dataY = (origin.y - imgY) * scaleY;
+          currentData.push({ x: dataX, y: dataY });
+          updateStatus(
+            `Point added: (${dataX.toFixed(3)}, ${dataY.toFixed(3)}). Total: ${currentData.length}`
+          );
+          updateLiveResults();
+        }
+      }
+    }
+
+    // p5.js mouseDragged: update panning if right mouse button is held
+    function mouseDragged() {
+      if (isSelecting) return;
+      if (isPanning) {
+        offsetX = initialOffsetX + (mouseX - panStartX) / zoomLevel;
+        offsetY = initialOffsetY + (mouseY - panStartY) / zoomLevel;
+        redrawCanvas();
+      }
+    }
+
+    // p5.js mouseReleased: stop panning when right mouse button is released
+    function mouseReleased() {
+      if (isPanning && mouseButton === RIGHT) {
+        isPanning = false;
+      }
+    }
+
+    /****************************************
+     *           p5.js Drawing Helpers      *
+     ****************************************/
+    function drawPoint(x, y, size, clr) {
+      push();
+      translate(offsetX * zoomLevel, offsetY * zoomLevel);
+      scale(zoomLevel);
+      fill(clr);
+      noStroke();
+      ellipse(x, y, size, size);
+      pop();
+    }
+
+    function drawLine(x1, y1, x2, y2, clr) {
+      push();
+      translate(offsetX * zoomLevel, offsetY * zoomLevel);
+      scale(zoomLevel);
+      stroke(clr);
+      strokeWeight(2);
+      line(x1, y1, x2, y2);
+      pop();
+    }
+
+    function drawCrosshair() {
+      push();
+      stroke(255, 0, 0, 180);
+      strokeWeight(0.5);
+      line(0, mouseY, width, mouseY);
+      line(mouseX, 0, mouseX, height);
+
+      if (origin) {
+        const realMouseX = (mouseX / zoomLevel) - offsetX;
+        const realMouseY = (mouseY / zoomLevel) - offsetY;
+        if (scaleX) {
+          const valueX = ((realMouseX - origin.x) * scaleX).toFixed(2);
+          fill(0, 0, 0, 150);
+          noStroke();
+          textSize(12);
+          text(`X: ${valueX}`, mouseX + 5, mouseY - 5);
+        }
+        if (scaleY) {
+          const valueY = ((origin.y - realMouseY) * scaleY).toFixed(2);
+          fill(0, 0, 0, 150);
+          noStroke();
+          textSize(12);
+          text(`Y: ${valueY}`, mouseX + 5, mouseY + 15);
+        }
+      }
+      pop();
+    }
+
+    function redrawCanvas() {
+      background(220);
+      if (img) {
+        push();
+        translate(offsetX * zoomLevel, offsetY * zoomLevel);
+        scale(zoomLevel);
+        image(img, 0, 0, img.width, img.height);
+        pop();
+
+        // Draw calibration points/lines
+        if (origin) {
+          drawPoint(origin.x, origin.y, 10, color(255, 0, 0));
+        }
+        if (xScalePoint) {
+          drawLine(origin.x, origin.y, xScalePoint.x, xScalePoint.y, color(0, 255, 0));
+          drawPoint(xScalePoint.x, xScalePoint.y, 8, color(0, 255, 0));
+        }
+        if (yScalePoint) {
+          drawLine(origin.x, origin.y, yScalePoint.x, yScalePoint.y, color(0, 0, 255));
+          drawPoint(yScalePoint.x, yScalePoint.y, 8, color(0, 0, 255));
+        }
+
+        // Draw current data points
+        if (origin && scaleX && scaleY && currentData.length > 0) {
+          for (let point of currentData) {
+            let screenX = origin.x + point.x / scaleX;
+            let screenY = origin.y - point.y / scaleY;
+            drawPoint(screenX, screenY, 6, color(currentDatasetColor));
+          }
+        }
+
+        if (
+          mode === "addpoint" ||
+          mode === "xscale" ||
+          mode === "yscale" ||
+          mode === "origin"
+        ) {
+          drawCrosshair();
+        }
+      }
+    }
+
+    /****************************************
+     *        File & Clipboard Loading      *
+     ****************************************/
+    function loadImageFromFile(file) {
+      const datasetNameInput = prompt("Enter a name for this dataset:", `Dataset ${datasetCounter}`);
+      if (datasetNameInput === null) return;
+      currentDatasetName = datasetNameInput.trim() || `Dataset ${datasetCounter}`;
+      document.getElementById('datasetName').value = currentDatasetName;
+
+      const curveNameInput = prompt("Enter a name for the first curve:", `Curve ${curveCounter}`);
+      if (curveNameInput === null) return;
+      currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
+      document.getElementById('curveName').value = currentCurveName;
+
+      if (currentData.length > 0) {
+        dataSets.push({
+          datasetName: currentDatasetName,
+          name: currentCurveName,
+          color: currentDatasetColor,
+          data: [...currentData]
+        });
+      }
+      currentData = [];
+      origin = null;
+      xScalePoint = null;
+      yScalePoint = null;
+      scaleX = null;
+      scaleY = null;
+      mode = "none";
+      datasetCounter++;
+      curveCounter = 1;
+      updateCurveIndicator();
+      resetView();
+      background(220);
+
+      let reader = new FileReader();
+      reader.onload = function(event) {
+        loadImageData(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function loadImageData(data) {
+      loadImage(data, (loadedImg) => {
+        img = loadedImg;
+        resetView();
+        redrawCanvas();
+        updateStatus("Image loaded. Set origin point first.");
+      });
+    }
+
+    /****************************************
+     *          Live Plot Updating          *
+     ****************************************/
+    function updateLiveResults() {
+      const allData = [...dataSets];
+      if (currentData.length > 0) {
+        allData.push({
+          datasetName: currentDatasetName,
+          name: currentCurveName,
+          color: currentDatasetColor,
+          data: [...currentData]
+        });
+      }
+      if (allData.length === 0) return;
+
+      let plotData = allData.map(dataset => {
+        return {
+          x: dataset.data.map(pt => pt.x),
+          y: dataset.data.map(pt => pt.y),
+          mode: 'lines+markers',
+          name: dataset.datasetName
+                ? `${dataset.datasetName}: ${dataset.name}`
+                : (dataset.name || "Unnamed"),
+          line: { color: dataset.color },
+          marker: { color: dataset.color }
+        };
+      });
+
+      Plotly.newPlot('liveResultsPlot', plotData, {
+        title: 'Live Digitized Results',
+        xaxis: { title: 'X' },
+        yaxis: { title: 'Y' },
+        margin: { t: 30, r: 30, b: 40, l: 50 },
+        legend: { x: 0, y: 1 }
+      });
+    }
+
+    /****************************************
+     *            Export to CSV             *
+     ****************************************/
+    function exportCSV() {
+      if (dataSets.length === 0 && currentData.length === 0) {
+        updateStatus("No data to export!");
+        return;
+      }
+      const tempDataSets = [...dataSets];
+      if (currentData.length > 0) {
+        tempDataSets.push({
+          datasetName: document.getElementById('datasetName').value || currentDatasetName,
+          name: document.getElementById('curveName').value || currentCurveName,
+          color: currentDatasetColor,
+          data: [...currentData]
+        });
+      }
+
+      let csvContent = "dataset,curve,x,y\n";
+      tempDataSets.forEach(dataset => {
+        const datasetName = dataset.datasetName || "Unnamed Dataset";
+        const curveName = dataset.name || "Unnamed Curve";
+        dataset.data.forEach(point => {
+          csvContent += `"${datasetName}","${curveName}",${point.x},${point.y}\n`;
+        });
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `digitized_data_${timestamp}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      updateStatus("CSV file exported!");
+    }
+
+    /****************************************
+     *           Curve Management           *
+     ****************************************/
+    function createNewCurve() {
+      if (currentData.length > 0) {
+        dataSets.push({
+          datasetName: currentDatasetName,
+          name: currentCurveName,
+          color: currentDatasetColor,
+          data: [...currentData]
+        });
+        currentData = [];
+        const curveNameInput = prompt("Enter a name for the new curve:", `Curve ${curveCounter + 1}`);
+        if (curveNameInput === null) {
+          dataSets.pop();
+          currentData = dataSets[dataSets.length - 1].data;
+          return;
+        }
+        curveCounter++;
+        currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
+        document.getElementById('curveName').value = currentCurveName;
+        // Generate a random color for the new curve
+        currentDatasetColor = getRandomColor();
+        updateStatus(`Started new curve: ${currentCurveName} in dataset: ${currentDatasetName}`);
+        updateCurveIndicator();
+        redrawCanvas();
+        updateLiveResults();
+      } else {
+        currentDatasetName = document.getElementById('datasetName').value;
+        currentCurveName = document.getElementById('curveName').value;
+        updateCurveIndicator();
+        updateStatus(`Ready to digitize: ${currentCurveName} in dataset: ${currentDatasetName}`);
+      }
+    }
+
+    function getRandomColor() {
+      const letters = '0123456789ABCDEF';
+      let color = '#';
+      for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+      }
+      return color;
+    }
+
+    /****************************************
+     *           View & UI Updates          *
+     ****************************************/
+    function resetView() {
+      if (img) {
+        const imgRatio = img.width / img.height;
+        const canvasRatio = canvasWidth / canvasHeight;
+        let fitScale;
+        if (imgRatio > canvasRatio) {
+          fitScale = (canvasWidth / img.width) * 0.9;
+        } else {
+          fitScale = (canvasHeight / img.height) * 0.9;
+        }
+        zoomLevel = fitScale;
+        offsetX = (canvasWidth / zoomLevel - img.width) / 2;
+        offsetY = (canvasHeight / zoomLevel - img.height) / 2;
+      } else {
+        zoomLevel = 1;
+        offsetX = 0;
+        offsetY = 0;
+      }
+      redrawCanvas();
+    }
+
+    function updateStatus(message) {
+      document.getElementById('status').textContent = message;
+    }
+
+    function updateCurveIndicator() {
+      document.getElementById('datasetNameDisplay').textContent = currentDatasetName;
+      document.getElementById('curveNameDisplay').textContent = currentCurveName;
+      document.getElementById('curveColorDisplay').style.backgroundColor = currentDatasetColor;
+      document.getElementById('pointCountDisplay').textContent = currentData.length;
+    }
+
+    /****************************************
+     *      Event Listeners & UI Hooks      *
+     ****************************************/
+    // File input
+    document.getElementById('imageLoader').onchange = function(e) {
+      if (e.target.files.length > 0) {
+        loadImageFromFile(e.target.files[0]);
+      }
+    };
+    // Paste area
+    const pasteArea = document.getElementById('pasteArea');
+    pasteArea.addEventListener('click', function() {
+      this.focus();
+      updateStatus("Paste image with Ctrl+V");
+    });
+    document.addEventListener('paste', function(e) {
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const blob = items[i].getAsFile();
+          loadImageFromFile(blob);
+          e.preventDefault();
+          return;
+        }
+      }
+      updateStatus("No image found in clipboard!");
+    });
+
+    // Calibration buttons
+    document.getElementById('setOriginBtn').onclick = () => {
+      mode = "origin";
+      updateStatus("Click on the image to set the origin (0,0)");
+    };
+    document.getElementById('setXScaleBtn').onclick = () => {
+      mode = "xscale";
+      const xValue = document.getElementById('xScaleValue').value;
+      updateStatus(`Click on the image to set X-Scale (${xValue} units from origin)`);
+    };
+    document.getElementById('setYScaleBtn').onclick = () => {
+      mode = "yscale";
+      const yValue = document.getElementById('yScaleValue').value;
+      updateStatus(`Click on the image to set Y-Scale (${yValue} units from origin)`);
+    };
+
+    // Add point button
+    document.getElementById('addPointBtn').onclick = () => {
+      mode = "addpoint";
+      currentDatasetName = document.getElementById('datasetName').value;
+      currentCurveName = document.getElementById('curveName').value;
+      updateCurveIndicator();
+      updateStatus(`Hold CTRL key and click to add data points for "${currentCurveName}" in dataset "${currentDatasetName}"`);
+    };
+
+    // Curve management
+    document.getElementById('newCurveBtn').onclick = createNewCurve;
+    document.getElementById('resetBtn').onclick = () => {
+      currentData = [];
+      redrawCanvas();
+      updateStatus("Current data points cleared. Calibration maintained.");
+      updateCurveIndicator();
+      updateLiveResults();
+    };
+
+    // CSV export
+    document.getElementById('exportCSVBtn').onclick = exportCSV;
+
+    // Reflect name changes in the overlay
+    document.getElementById('datasetName').addEventListener('input', function() {
+      currentDatasetName = this.value;
+      updateCurveIndicator();
+    });
+    document.getElementById('curveName').addEventListener('input', function() {
+      currentCurveName = this.value;
+      updateCurveIndicator();
+    });
+
+    // Zoom controls
+    document.getElementById('zoomIn').onclick = () => {
+      zoomLevel *= 1.2;
+      redrawCanvas();
+    };
+    document.getElementById('zoomOut').onclick = () => {
+      zoomLevel /= 1.2;
+      redrawCanvas();
+    };
+    document.getElementById('resetZoom').onclick = () => {
+      resetView();
+    };
+
+    /****************************************
+     *  Screenshot Area Selection (#2) Logic
+     ****************************************/
+    const startSelectionBtn = document.getElementById('start-selection-btn');
+    const screenshotPreview = document.getElementById('screenshotPreview');
+
+    startSelectionBtn.addEventListener('click', () => {
+      isSelecting = true;
+      startSelectionBtn.style.display = 'none';
+      updateStatus("Drag on the page to select an area for screenshot.");
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      if (isSelecting && e.button === 0) {
+        startX = e.clientX;
+        startY = e.clientY;
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      }
+    });
+
+    function onMouseMove(e) {
+      if (isSelecting) {
+        endX = e.clientX;
+        endY = e.clientY;
+        const width = Math.abs(endX - startX);
+        const height = Math.abs(endY - startY);
+        createSelectionBox(
+          Math.min(startX, endX),
+          Math.min(startY, endY),
+          width,
+          height
+        );
+      }
+    }
+
+    function onMouseUp() {
+      if (isSelecting) {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        if (selectionBox) {
+          const rect = selectionBox.getBoundingClientRect();
+          html2canvas(document.body, {
+            x: rect.left,
+            y: rect.top,
+            width: rect.width,
+            height: rect.height,
+            scrollX: -window.scrollX,
+            scrollY: -window.scrollY
+          }).then((canvas) => {
+            const imgData = canvas.toDataURL('image/png');
+            screenshotPreview.src = imgData;
+            screenshotPreview.style.display = 'block';
+            selectionBox.remove();
+            selectionBox = null;
+            isSelecting = false;
+            startSelectionBtn.style.display = 'inline-block';
+            updateStatus("Screenshot captured! Digitizing mode is active again.");
+          });
+        } else {
+          isSelecting = false;
+          startSelectionBtn.style.display = 'inline-block';
+          updateStatus("No area selected. Please try again.");
+        }
+      }
+    }
+
+    function createSelectionBox(x, y, width, height) {
+      if (selectionBox) {
+        selectionBox.remove();
+      }
+      selectionBox = document.createElement('div');
+      selectionBox.className = 'selection-box';
+      selectionBox.style.left = x + 'px';
+      selectionBox.style.top = y + 'px';
+      selectionBox.style.width = width + 'px';
+      selectionBox.style.height = height + 'px';
+      document.body.appendChild(selectionBox);
+    }
+  </script>
+</body>
+</html>

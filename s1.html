@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Digitizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+        }
+        #plot-container {
+            flex: 1;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .controls button, .controls input {
+            margin: 5px;
+            padding: 10px;
+            font-size: 14px;
+        }
+        .instructions {
+            background: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            background: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+        .overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>Data Digitizer</h1>
+    <div class="instructions">
+        <h2>Instructions</h2>
+        <ul>
+            <li>Load an image using the file input or paste it (Ctrl+V) into the canvas.</li>
+            <li>Enter a dataset name and curve name.</li>
+            <li>Set the calibration origin and scales by clicking on the image.</li>
+            <li>Add data points by holding CTRL and clicking on the image.</li>
+            <li>View the live plot and export data to CSV.</li>
+        </ul>
+    </div>
+    <div class="container">
+        <div id="canvas-container">
+            <div class="overlay" id="overlay">Dataset: <span id="dataset-name">None</span> | Curve: <span id="curve-name">None</span> | Points: <span id="point-count">0</span></div>
+        </div>
+        <div id="plot-container"></div>
+    </div>
+    <div class="controls">
+        <input type="file" id="image-input" accept="image/*">
+        <input type="text" id="dataset-input" placeholder="Dataset Name">
+        <input type="text" id="curve-input" placeholder="Curve Name">
+        <button id="calibrate-origin">Set Origin</button>
+        <input type="number" id="x-scale-input" placeholder="X Scale">
+        <input type="number" id="y-scale-input" placeholder="Y Scale">
+        <button id="add-points">Add Points (Hold CTRL)</button>
+        <button id="export-csv">Export CSV</button>
+        <input type="file" id="import-csv" accept=".csv">
+    </div>
+    <div class="status" id="status">Status: Ready</div>
+
+    <script>
+        let canvas;
+        let img;
+        let origin = { x: 0, y: 0 };
+        let xScale = 1, yScale = 1;
+        let points = [];
+        let currentDataset = "None";
+        let currentCurve = "None";
+        let isCalibratingOrigin = false;
+        let isAddingPoints = false;
+
+        // p5.js setup
+        function setup() {
+            canvas = createCanvas(800, 600);
+            canvas.parent('canvas-container');
+            background(255);
+            textSize(16);
+        }
+
+        function draw() {
+            background(255);
+            if (img) {
+                image(img, 0, 0, width, height);
+            }
+            drawCrosshair();
+            drawPoints();
+        }
+
+        // Draw crosshair for calibration/point adding
+        function drawCrosshair() {
+            if (isCalibratingOrigin || isAddingPoints) {
+                stroke(255, 0, 0);
+                line(mouseX, 0, mouseX, height);
+                line(0, mouseY, width, mouseY);
+            }
+        }
+
+        // Draw data points
+        function drawPoints() {
+            for (let point of points) {
+                stroke(point.color);
+                fill(point.color);
+                ellipse(point.x, point.y, 5, 5);
+            }
+        }
+
+        // Handle mouse clicks
+        function mouseClicked() {
+            if (isCalibratingOrigin) {
+                origin = { x: mouseX, y: mouseY };
+                isCalibratingOrigin = false;
+                updateStatus("Origin set.");
+            } else if (isAddingPoints && keyIsDown(CONTROL)) {
+                const x = (mouseX - origin.x) * xScale;
+                const y = (origin.y - mouseY) * yScale;
+                points.push({ x: mouseX, y: mouseY, color: 'red', dataX: x, dataY: y });
+                updatePlot();
+                updateOverlay();
+            }
+        }
+
+        // Update Plotly chart
+        function updatePlot() {
+            const xData = points.map(p => p.dataX);
+            const yData = points.map(p => p.dataY);
+            const plotData = [{ x: xData, y: yData, mode: 'markers', type: 'scatter' }];
+            Plotly.newPlot('plot-container', plotData, { title: 'Digitized Data' });
+        }
+
+        // Update overlay with current dataset/curve info
+        function updateOverlay() {
+            document.getElementById('dataset-name').textContent = currentDataset;
+            document.getElementById('curve-name').textContent = currentCurve;
+            document.getElementById('point-count').textContent = points.length;
+        }
+
+        // Update status messages
+        function updateStatus(message) {
+            document.getElementById('status').textContent = `Status: ${message}`;
+        }
+
+        // Event listeners
+        document.getElementById('image-input').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    img = loadImage(event.target.result, () => {
+                        currentDataset = document.getElementById('dataset-input').value || "Dataset";
+                        currentCurve = document.getElementById('curve-input').value || "Curve";
+                        updateOverlay();
+                        updateStatus("Image loaded.");
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('calibrate-origin').addEventListener('click', () => {
+            isCalibratingOrigin = true;
+            updateStatus("Click to set origin.");
+        });
+
+        document.getElementById('add-points').addEventListener('click', () => {
+            isAddingPoints = true;
+            updateStatus("Hold CTRL and click to add points.");
+        });
+
+        document.getElementById('export-csv').addEventListener('click', () => {
+            const csvContent = "Dataset,Curve,X,Y\n" + points.map(p => `${currentDataset},${currentCurve},${p.dataX},${p.dataY}`).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'data.csv';
+            a.click();
+            updateStatus("CSV exported.");
+        });
+
+        document.getElementById('import-csv').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    const lines = event.target.result.split('\n');
+                    points = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        const [dataset, curve, x, y] = lines[i].split(',');
+                        points.push({ x: parseFloat(x), y: parseFloat(y), color: 'red', dataX: parseFloat(x), dataY: parseFloat(y) });
+                    }
+                    updatePlot();
+                    updateOverlay();
+                    updateStatus("CSV imported.");
+                };
+                reader.readAsText(file);
+            }
+        });
+    </script>
+</body>
+</html>

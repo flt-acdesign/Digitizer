@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Digitize Experimental Data + Screen Capture</title>
+  <!-- External Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  
+  <!-- Link to external CSS -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>Digitize Experimental Data + Screen Capture</h1>
+
+  <!-- Controls for loading images -->
+  <div class="controls">
+    <input type="file" id="imageLoader" accept="image/*">
+    <div>- OR -</div>
+    <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
+  </div>
+
+  <!-- Calibration controls -->
+  <div class="controls">
+    <button id="setOriginBtn">Set Origin</button>
+    <button id="setXScaleBtn">Set X-Scale</button>
+    <input type="number" id="xScaleValue" placeholder="X unit value" value="1" step="any" style="width: 100px;">
+    <button id="setYScaleBtn">Set Y-Scale</button>
+    <input type="number" id="yScaleValue" placeholder="Y unit value" value="1" step="any" style="width: 100px;">
+  </div>
+
+  <!-- Curve naming controls -->
+  <div class="controls">
+    <div>
+      <label for="datasetName">Dataset Name:</label>
+      <input type="text" id="datasetName" placeholder="Dataset name" value="Dataset 1">
+    </div>
+    <div>
+      <label for="curveName">Curve Name:</label>
+      <input type="text" id="curveName" placeholder="Curve name" value="Curve 1">
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="controls">
+    <button id="addPointBtn">Add Data Points</button>
+    <button id="newCurveBtn">New Curve</button>
+    <button id="resetBtn">Reset Current</button>
+    <button id="exportCSVBtn">Export CSV</button>
+  </div>
+
+  <div id="status">Ready to load image. Use file input or paste image.</div>
+
+  <!-- Main sections: left for the p5 canvas, right for the Plotly chart -->
+  <div class="main-sections">
+    <!-- P5 Canvas Container -->
+    <div id="canvasContainer" style="flex: 1;">
+      <div class="zoom-controls">
+        <button id="zoomIn">+</button>
+        <button id="zoomOut">-</button>
+        <button id="resetZoom">Reset View</button>
+      </div>
+      <div id="currentCurveIndicator">
+        <div>Dataset: <span id="datasetNameDisplay">Dataset 1</span></div>
+        <div>Curve: <span id="curveNameDisplay">Curve 1</span></div>
+        <div style="display: flex; align-items: center;">
+          <div id="curveColorDisplay"></div>
+          <div>Points: <span id="pointCountDisplay">0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Results Plot & screenshot preview -->
+    <div id="liveResultsContainer">
+      <div id="liveResultsPlot"></div>
+      <img id="screenshotPreview" alt="Screen Capture Preview">
+    </div>
+  </div>
+
+  <!-- Button for starting screenshot selection -->
+  <button id="start-selection-btn">Start Screenshot Selection</button>
+
+  <!-- Include JavaScript files -->
+  <script src="js/p5-sketch.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/dataProcessing.js"></script>
+  <script src="js/screenshot.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

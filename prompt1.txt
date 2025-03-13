@@ -1,0 +1,47 @@
+I need a web application that digitizes experimental data from an image. The application should include the following functionalities:
+
+Image Loading & Input:
+
+Users can load an image using a file input or by pasting an image (via Ctrl+V) into a designated paste area, which is the same as the area where the digitizing will be done.
+When an image is loaded, the user is prompted to enter a dataset name and a curve name.
+
+Calibration:
+
+Users can set a calibration “origin” (the (0,0) point) by clicking on the image.
+Users can define the X-scale and Y-scale by clicking on the image (with the X-scale click forced to be horizontal and the Y-scale click forced to be vertical relative to the origin).
+The scale values (in user-defined units) are entered into number input fields.
+
+Data Point Collection:
+
+In “add point” mode, users add data points by holding down the CTRL key and clicking on the image.
+The code calculates the real-world data coordinates from the clicked image position using the calibration (origin and scales).
+Points are drawn on the image in a color corresponding to the current curve.
+
+Interactive Canvas with p5.js:
+
+The application uses p5.js to create and manage a drawing canvas.
+It supports panning (dragging with the right mouse button) and zooming (using the mouse wheel or dedicated zoom buttons).
+A crosshair is displayed while in calibration or point-adding modes to aid in precise positioning.
+
+Live Plotting with Plotly:
+
+As points are added, the code updates a live Plotly chart displaying the digitized data.
+The Plotly chart shows all saved curves/datasets and updates in real time.
+
+Screenshot Functionality:
+
+There is a button to allow the user to take a screenshot of part of any screen. This screenshot will be copied to the clipboard and pasted to the digitizing area for data collection.
+
+CSV Export:
+
+The code exports all the digitized data points (including dataset and curve names) to a CSV file.
+Each row in the CSV contains the dataset name, curve name, and the (x,y) data coordinates.
+
+There is a button which allows the user to load a .csv with this format and plot the data. Then the user can add additional data and export again the .csv file. 
+
+
+UI Enhancements & Styling:
+
+The page includes a header, an instructions box with bullet points on how to use the application, and a status area that displays messages.
+Controls are grouped and styled with CSS for a modern and clean look.
+There is an overlay for displaying current curve information (dataset name, curve name, color, and number of points).
