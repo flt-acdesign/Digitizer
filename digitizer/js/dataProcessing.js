@@ -64,6 +64,61 @@ function updateLiveResults() {
     document.body.removeChild(link);
     updateStatus("CSV file exported!");
   }
+
+ 
+
+
+// This should be added or replaced in the dataProcessing.js file
+
+function exportJSON() {
+    if (dataSets.length === 0 && currentData.length === 0) {
+      updateStatus("No data to export!");
+      return;
+    }
+    
+    const tempDataSets = [...dataSets];
+    if (currentData.length > 0) {
+      tempDataSets.push({
+        datasetName: document.getElementById('datasetName').value || currentDatasetName,
+        name: document.getElementById('curveName').value || currentCurveName,
+        color: currentDatasetColor,
+        data: [...currentData]
+      });
+    }
+    
+    // Format the data for JSON export
+    const formattedData = tempDataSets.map(dataset => {
+      return {
+        dataset: dataset.datasetName || "Unnamed Dataset",
+        curve: dataset.name || "Unnamed Curve",
+        color: dataset.color,
+        points: dataset.data.map(point => ({
+          x: point.x,
+          y: point.y
+        }))
+      };
+    });
+    
+    // Create the JSON file
+    const jsonContent = JSON.stringify(formattedData, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `digitized_data_${timestamp}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    updateStatus("JSON file exported!");
+  }
+  
+  // Make sure the button is connected correctly in ui.js
+  // Add this to ui.js if it's not already there:
+  document.getElementById('exportJSONBtn').onclick = exportJSON;
+
+
   
   function createNewCurve() {
     if (currentData.length > 0) {

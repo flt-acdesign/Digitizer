@@ -162,7 +162,8 @@ function loadImageFromFile(file) {
     updateCurveIndicator();
     updateLiveResults();
   };
-  document.getElementById('exportCSVBtn').onclick = exportCSV;
+  //document.getElementById('exportCSVBtn').onclick = exportCSV;
+  document.getElementById('exportJSONBtn').onclick = exportJSON;
   
   document.getElementById('datasetName').addEventListener('input', function() {
     currentDatasetName = this.value;

@@ -6,7 +6,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Digitize Experimental Data + Screen Capture</title>
+  <title>Digitize Experimental Data</title>
   <!-- External Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1>Digitize Experimental Data + Screen Capture</h1>
+  <h1>Digitize Experimental Data</h1>
 
   <!-- Controls for loading images -->
   <div class="controls">
@@ -50,7 +50,7 @@
     <button id="addPointBtn">Add Data Points</button>
     <button id="newCurveBtn">New Curve</button>
     <button id="resetBtn">Reset Current</button>
-    <button id="exportCSVBtn">Export CSV</button>
+    <button id="exportJSONBtn">Export JSON</button>
     <button id="flipVerticalBtn">Flip Image Vertically</button>
   </div>
 
@@ -62,11 +62,6 @@
     <div id="canvasContainer" style="flex: 1; position: relative;">
       <div id="pasteArea">Click here and paste image (Ctrl+V)</div>
       <!-- p5.js canvas will be injected here -->
-      <div class="zoom-controls">
-        <button id="zoomIn">+</button>
-        <button id="zoomOut">-</button>
-        <button id="resetZoom">Reset View</button>
-      </div>
       <div id="currentCurveIndicator">
         <div>Dataset: <span id="datasetNameDisplay">Dataset 1</span></div>
         <div>Curve: <span id="curveNameDisplay">Curve 1</span></div>
@@ -77,21 +72,16 @@
       </div>
     </div>
 
-    <!-- Live Results Plot & screenshot preview -->
+    <!-- Live Results Plot -->
     <div id="liveResultsContainer">
       <div id="liveResultsPlot"></div>
-      <img id="screenshotPreview" alt="Screen Capture Preview">
     </div>
   </div>
-
-  <!-- Button for starting screenshot selection -->
-  <button id="start-selection-btn">Start Screenshot Selection</button>
 
   <!-- Include JavaScript files -->
   <script src="js/p5-sketch.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/dataProcessing.js"></script>
-  <script src="js/screenshot.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
@@ -192,18 +182,6 @@
     height: 600px;
     background: #fafafa;
   }
-  /* Zoom controls */
-  .zoom-controls {
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    background: rgba(255, 255, 255, 0.7);
-    padding: 5px;
-    border-radius: 5px;
-    z-index: 100;
-    display: flex;
-    gap: 5px;
-  }
   /* Status area */
   #status {
     margin: 10px 0;
@@ -248,23 +226,6 @@
     display: flex;
     gap: 20px;
   }
-  /* Selection box for screenshot */
-  .selection-box {
-    position: fixed;
-    border: 2px dashed #007bff;
-    background: rgba(0, 123, 255, 0.1);
-    pointer-events: none; 
-    z-index: 9999;
-  }
-  /* Screenshot preview */
-  #screenshotPreview {
-    margin-top: 20px;
-    max-width: 100%;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    display: none;
-  }
-  
 
 ###########################################
 # FILE: F:\PhD\01_DEV\JS\Digitizer\digitizer\js\dataProcessing.js
@@ -335,6 +296,50 @@ function updateLiveResults() {
     link.click();
     document.body.removeChild(link);
     updateStatus("CSV file exported!");
+  }
+
+  function exportJSON() {
+    if (dataSets.length === 0 && currentData.length === 0) {
+      updateStatus("No data to export!");
+      return;
+    }
+    
+    const tempDataSets = [...dataSets];
+    if (currentData.length > 0) {
+      tempDataSets.push({
+        datasetName: document.getElementById('datasetName').value || currentDatasetName,
+        name: document.getElementById('curveName').value || currentCurveName,
+        color: currentDatasetColor,
+        data: [...currentData]
+      });
+    }
+    
+    // Format the data for JSON export
+    const formattedData = tempDataSets.map(dataset => {
+      return {
+        dataset: dataset.datasetName || "Unnamed Dataset",
+        curve: dataset.name || "Unnamed Curve",
+        color: dataset.color,
+        points: dataset.data.map(point => ({
+          x: point.x,
+          y: point.y
+        }))
+      };
+    });
+    
+    // Create the JSON file
+    const jsonContent = JSON.stringify(formattedData, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `digitized_data_${timestamp}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    updateStatus("JSON file exported!");
   }
   
   function createNewCurve() {
@@ -456,13 +461,12 @@ function draw() {
 }
 
 function mouseMoved() {
-  if (img && !isSelecting && !isPanning) {
+  if (img && !isPanning) {
     redrawCanvas();
   }
 }
 
 function mousePressed() {
-  if (isSelecting) return;
   if (!img) return;
 
   if (mouseButton === LEFT) {
@@ -620,7 +624,6 @@ function redrawCanvas() {
 function setupCanvasEvents(canvas) {
   // Mouse wheel zoom
   canvas.canvas.addEventListener('wheel', function(event) {
-    if (isSelecting) return;
     event.preventDefault();
     const rect = this.getBoundingClientRect();
     const mouseXOnCanvas = event.clientX - rect.left;
@@ -667,6 +670,27 @@ function setupCanvasEvents(canvas) {
   canvas.canvas.addEventListener('contextmenu', function(event) {
     event.preventDefault();
   });
+}
+
+function resetView() {
+  if (img) {
+    const imgRatio = img.width / img.height;
+    const canvasRatio = canvasWidth / canvasHeight;
+    let fitScale;
+    if (imgRatio > canvasRatio) {
+      fitScale = (canvasWidth / img.width) * 0.9;
+    } else {
+      fitScale = (canvasHeight / img.height) * 0.9;
+    }
+    zoomLevel = fitScale;
+    offsetX = (canvasWidth / zoomLevel - img.width) / 2;
+    offsetY = (canvasHeight / zoomLevel - img.height) / 2;
+  } else {
+    zoomLevel = 1;
+    offsetX = 0;
+    offsetY = 0;
+  }
+  redrawCanvas();
 }
 
 ###########################################
@@ -773,6 +797,12 @@ function loadImageFromFile(file) {
     currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
     document.getElementById('curveName').value = currentCurveName;
     
+    // Add color picker dialog for the first curve
+    const colorInput = prompt("Enter a color for the curve (hex code or color name):", currentDatasetColor);
+    if (colorInput !== null) {
+      currentDatasetColor = colorInput;
+    }
+    
     if (currentData.length > 0) {
       dataSets.push({
         datasetName: currentDatasetName,
@@ -861,6 +891,54 @@ function loadImageFromFile(file) {
     updateStatus(`Hold CTRL key and click to add data points for "${currentCurveName}" in dataset "${currentDatasetName}"`);
   };
   
+  // Modified createNewCurve function with color selection
+  function createNewCurve() {
+    if (currentData.length > 0) {
+      dataSets.push({
+        datasetName: currentDatasetName,
+        name: currentCurveName,
+        color: currentDatasetColor,
+        data: [...currentData]
+      });
+      currentData = [];
+      const curveNameInput = prompt("Enter a name for the new curve:", `Curve ${curveCounter + 1}`);
+      if (curveNameInput === null) {
+        dataSets.pop();
+        currentData = dataSets[dataSets.length - 1].data;
+        return;
+      }
+      
+      // Add color picker dialog for the new curve
+      const colorInput = prompt("Enter a color for the curve (hex code or color name):", getRandomColor());
+      if (colorInput === null) {
+        dataSets.pop();
+        currentData = dataSets[dataSets.length - 1].data;
+        return;
+      }
+      
+      curveCounter++;
+      currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
+      document.getElementById('curveName').value = currentCurveName;
+      currentDatasetColor = colorInput || getRandomColor();
+      updateStatus(`Started new curve: ${currentCurveName} in dataset: ${currentDatasetName}`);
+      updateCurveIndicator();
+      redrawCanvas();
+      updateLiveResults();
+    } else {
+      currentDatasetName = document.getElementById('datasetName').value;
+      currentCurveName = document.getElementById('curveName').value;
+      
+      // Allow color selection even when no points yet
+      const colorInput = prompt("Enter a color for the curve (hex code or color name):", currentDatasetColor);
+      if (colorInput !== null) {
+        currentDatasetColor = colorInput;
+      }
+      
+      updateCurveIndicator();
+      updateStatus(`Ready to digitize: ${currentCurveName} in dataset: ${currentDatasetName}`);
+    }
+  }
+  
   // Restoring the functionality of New Curve, Reset Current, and Export CSV buttons
   document.getElementById('newCurveBtn').onclick = createNewCurve;
   document.getElementById('resetBtn').onclick = () => {
@@ -870,7 +948,8 @@ function loadImageFromFile(file) {
     updateCurveIndicator();
     updateLiveResults();
   };
-  document.getElementById('exportCSVBtn').onclick = exportCSV;
+  //document.getElementById('exportCSVBtn').onclick = exportCSV;
+  document.getElementById('exportJSONBtn').onclick = exportJSON;
   
   document.getElementById('datasetName').addEventListener('input', function() {
     currentDatasetName = this.value;
@@ -880,18 +959,6 @@ function loadImageFromFile(file) {
     currentCurveName = this.value;
     updateCurveIndicator();
   });
-  
-  document.getElementById('zoomIn').onclick = () => {
-    zoomLevel *= 1.2;
-    redrawCanvas();
-  };
-  document.getElementById('zoomOut').onclick = () => {
-    zoomLevel /= 1.2;
-    redrawCanvas();
-  };
-  document.getElementById('resetZoom').onclick = () => {
-    resetView();
-  };
   
   // Helper Functions for UI Updates
   function updateStatus(message) {
@@ -904,5 +971,4 @@ function loadImageFromFile(file) {
     document.getElementById('curveColorDisplay').style.backgroundColor = currentDatasetColor;
     document.getElementById('pointCountDisplay').textContent = currentData.length;
   }
-  
 
