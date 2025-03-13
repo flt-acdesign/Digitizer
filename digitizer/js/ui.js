@@ -185,3 +185,27 @@ function loadImageFromFile(file) {
     document.getElementById('curveColorDisplay').style.backgroundColor = currentDatasetColor;
     document.getElementById('pointCountDisplay').textContent = currentData.length;
   }
+
+   // Add this to ui.js
+  
+  // Load JSON button and file input handler
+  document.getElementById('loadJSONBtn').onclick = () => {
+    document.getElementById('jsonLoader').click();
+  };
+  
+  document.getElementById('jsonLoader').addEventListener('change', function(e) {
+    if (e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      
+      reader.onload = function(event) {
+        const jsonContent = event.target.result;
+        loadJSONData(jsonContent);
+        
+        // Reset file input so the same file can be selected again if needed
+        document.getElementById('jsonLoader').value = "";
+      };
+      
+      reader.readAsText(file);
+    }
+  });

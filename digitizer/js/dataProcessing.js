@@ -119,6 +119,91 @@ function exportJSON() {
   document.getElementById('exportJSONBtn').onclick = exportJSON;
 
 
+
+
+
+// Add this to dataProcessing.js
+
+function loadJSONData(jsonContent) {
+    try {
+      // Parse the JSON content
+      const loadedData = JSON.parse(jsonContent);
+      
+      if (!Array.isArray(loadedData)) {
+        updateStatus("Invalid JSON format: data must be an array");
+        return false;
+      }
+      
+      // Find maximum dataset and curve counters for proper naming of new items
+      let maxDatasetNum = 0;
+      let maxCurveNum = 0;
+      
+      // Process the data
+      loadedData.forEach(dataset => {
+        // Extract dataset number if it follows the format "Dataset X"
+        if (dataset.dataset && dataset.dataset.match(/Dataset\s+(\d+)/)) {
+          const num = parseInt(dataset.dataset.match(/Dataset\s+(\d+)/)[1]);
+          maxDatasetNum = Math.max(maxDatasetNum, num);
+        }
+        
+        // Extract curve number if it follows the format "Curve X"
+        if (dataset.curve && dataset.curve.match(/Curve\s+(\d+)/)) {
+          const num = parseInt(dataset.curve.match(/Curve\s+(\d+)/)[1]);
+          maxCurveNum = Math.max(maxCurveNum, num);
+        }
+        
+        // Handle points
+        if (!Array.isArray(dataset.points)) {
+          updateStatus("Warning: Skipping dataset with invalid points format");
+          return; // Skip this dataset
+        }
+        
+        // Create dataset entry to add to dataSets array
+        const dataEntry = {
+          datasetName: dataset.dataset || "Unnamed Dataset",
+          name: dataset.curve || "Unnamed Curve",
+          color: dataset.color || getRandomColor(),
+          data: dataset.points.map(pt => ({
+            x: typeof pt.x === 'number' ? pt.x : parseFloat(pt.x),
+            y: typeof pt.y === 'number' ? pt.y : parseFloat(pt.y)
+          }))
+        };
+        
+        // Add to dataSets array
+        dataSets.push(dataEntry);
+      });
+      
+      // Update counters for new datasets/curves
+      datasetCounter = maxDatasetNum + 1;
+      curveCounter = maxCurveNum + 1;
+      
+      // Set current dataset/curve to the last one loaded
+      if (dataSets.length > 0) {
+        const lastDataset = dataSets[dataSets.length - 1];
+        currentDatasetName = lastDataset.datasetName;
+        currentCurveName = lastDataset.name;
+        currentDatasetColor = lastDataset.color;
+        document.getElementById('datasetName').value = currentDatasetName;
+        document.getElementById('curveName').value = currentCurveName;
+        updateCurveIndicator();
+      }
+      
+      // Update the live results plot
+      updateLiveResults();
+      
+      updateStatus(`Loaded ${loadedData.length} dataset(s) from JSON. Ready to continue adding data.`);
+      return true;
+      
+    } catch (error) {
+      console.error("Error loading JSON data:", error);
+      updateStatus("Error loading JSON file: " + error.message);
+      return false;
+    }
+  }
+  
+ 
+
+
   
   function createNewCurve() {
     if (currentData.length > 0) {
