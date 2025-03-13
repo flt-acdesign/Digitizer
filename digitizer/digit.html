@@ -39,6 +39,23 @@
       <label for="curveName">Curve Name:</label>
       <input type="text" id="curveName" placeholder="Curve name" value="Curve 1">
     </div>
+    <div>
+      <label for="curveColorPicker">Curve Color:</label>
+      <input type="color" id="curveColorPicker" value="#FFA500">
+    </div>
+  </div>
+
+  <!-- Axis labels controls -->
+  <div class="controls">
+    <div>
+      <label for="xAxisLabel">X-Axis Label:</label>
+      <input type="text" id="xAxisLabel" placeholder="X Axis" value="X">
+    </div>
+    <div>
+      <label for="yAxisLabel">Y-Axis Label:</label>
+      <input type="text" id="yAxisLabel" placeholder="Y Axis" value="Y">
+    </div>
+    <button id="updateAxisLabelsBtn">Update Axis Labels</button>
   </div>
 
   <!-- Action buttons -->
@@ -47,11 +64,8 @@
     <button id="newCurveBtn">New Curve</button>
     <button id="resetBtn">Reset Current</button>
     <button id="exportJSONBtn">Export JSON</button>
-
     <button id="loadJSONBtn">Load JSON</button>
     <input type="file" id="jsonLoader" accept=".json" style="display:none;">
-
-
     <button id="flipVerticalBtn">Flip Image Vertically</button>
   </div>
 
@@ -79,15 +93,10 @@
     </div>
   </div>
 
-  <!-- Include JavaScript files -->
-
-
-
+  <!-- Include JavaScript files in the correct order -->
   <script src="js/p5-sketch.js"></script>
   <script src="js/dataProcessing.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
-
-
 </body>
 </html>

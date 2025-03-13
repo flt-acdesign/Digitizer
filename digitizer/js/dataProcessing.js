@@ -21,15 +21,20 @@ function updateLiveResults() {
         marker: { color: dataset.color }
       };
     });
+    
+    // Get current axis labels from input fields
+    const xLabel = document.getElementById('xAxisLabel').value || "X";
+    const yLabel = document.getElementById('yAxisLabel').value || "Y";
+    
     Plotly.newPlot('liveResultsPlot', plotData, {
       title: 'Live Digitized Results',
-      xaxis: { title: 'X' },
-      yaxis: { title: 'Y' },
+      xaxis: { title: xLabel },
+      yaxis: { title: yLabel },
       margin: { t: 30, r: 30, b: 40, l: 50 },
       legend: { x: 0, y: 1 }
     });
   }
-  
+    
   function exportCSV() {
     if (dataSets.length === 0 && currentData.length === 0) {
       updateStatus("No data to export!");
@@ -64,13 +69,8 @@ function updateLiveResults() {
     document.body.removeChild(link);
     updateStatus("CSV file exported!");
   }
-
- 
-
-
-// This should be added or replaced in the dataProcessing.js file
-
-function exportJSON() {
+  
+  function exportJSON() {
     if (dataSets.length === 0 && currentData.length === 0) {
       updateStatus("No data to export!");
       return;
@@ -114,17 +114,7 @@ function exportJSON() {
     updateStatus("JSON file exported!");
   }
   
-  // Make sure the button is connected correctly in ui.js
-  // Add this to ui.js if it's not already there:
-  document.getElementById('exportJSONBtn').onclick = exportJSON;
-
-
-
-
-
-// Add this to dataProcessing.js
-
-function loadJSONData(jsonContent) {
+  function loadJSONData(jsonContent) {
     try {
       // Parse the JSON content
       const loadedData = JSON.parse(jsonContent);
@@ -185,6 +175,7 @@ function loadJSONData(jsonContent) {
         currentDatasetColor = lastDataset.color;
         document.getElementById('datasetName').value = currentDatasetName;
         document.getElementById('curveName').value = currentCurveName;
+        document.getElementById('curveColorPicker').value = currentDatasetColor;
         updateCurveIndicator();
       }
       
@@ -200,69 +191,3 @@ function loadJSONData(jsonContent) {
       return false;
     }
   }
-  
- 
-
-
-  
-  function createNewCurve() {
-    if (currentData.length > 0) {
-      dataSets.push({
-        datasetName: currentDatasetName,
-        name: currentCurveName,
-        color: currentDatasetColor,
-        data: [...currentData]
-      });
-      currentData = [];
-      const curveNameInput = prompt("Enter a name for the new curve:", `Curve ${curveCounter + 1}`);
-      if (curveNameInput === null) {
-        dataSets.pop();
-        currentData = dataSets[dataSets.length - 1].data;
-        return;
-      }
-      curveCounter++;
-      currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
-      document.getElementById('curveName').value = currentCurveName;
-      currentDatasetColor = getRandomColor();
-      updateStatus(`Started new curve: ${currentCurveName} in dataset: ${currentDatasetName}`);
-      updateCurveIndicator();
-      redrawCanvas();
-      updateLiveResults();
-    } else {
-      currentDatasetName = document.getElementById('datasetName').value;
-      currentCurveName = document.getElementById('curveName').value;
-      updateCurveIndicator();
-      updateStatus(`Ready to digitize: ${currentCurveName} in dataset: ${currentDatasetName}`);
-    }
-  }
-  
-  function getRandomColor() {
-    const letters = '0123456789ABCDEF';
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-      color += letters[Math.floor(Math.random() * 16)];
-    }
-    return color;
-  }
-  
-  function resetView() {
-    if (img) {
-      const imgRatio = img.width / img.height;
-      const canvasRatio = canvasWidth / canvasHeight;
-      let fitScale;
-      if (imgRatio > canvasRatio) {
-        fitScale = (canvasWidth / img.width) * 0.9;
-      } else {
-        fitScale = (canvasHeight / img.height) * 0.9;
-      }
-      zoomLevel = fitScale;
-      offsetX = (canvasWidth / zoomLevel - img.width) / 2;
-      offsetY = (canvasHeight / zoomLevel - img.height) / 2;
-    } else {
-      zoomLevel = 1;
-      offsetX = 0;
-      offsetY = 0;
-    }
-    redrawCanvas();
-  }
-  

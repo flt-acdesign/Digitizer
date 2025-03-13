@@ -11,11 +11,8 @@ function loadImageFromFile(file) {
     currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
     document.getElementById('curveName').value = currentCurveName;
     
-    // Add color picker dialog for the first curve
-    const colorInput = prompt("Enter a color for the curve (hex code or color name):", currentDatasetColor);
-    if (colorInput !== null) {
-      currentDatasetColor = colorInput;
-    }
+    // Use the color picker value instead of prompt
+    currentDatasetColor = document.getElementById('curveColorPicker').value;
     
     if (currentData.length > 0) {
       dataSets.push({
@@ -44,7 +41,7 @@ function loadImageFromFile(file) {
     };
     reader.readAsDataURL(file);
   }
-  
+    
   function loadImageData(data) {
     loadImage(data, (loadedImg) => {
       img = loadedImg;
@@ -105,6 +102,20 @@ function loadImageFromFile(file) {
     updateStatus(`Hold CTRL key and click to add data points for "${currentCurveName}" in dataset "${currentDatasetName}"`);
   };
   
+  // Update the curveColorPicker event handler
+  document.getElementById('curveColorPicker').addEventListener('input', function() {
+    currentDatasetColor = this.value;
+    document.getElementById('curveColorDisplay').style.backgroundColor = currentDatasetColor;
+  });
+  
+  // Axis labels update button
+  document.getElementById('updateAxisLabelsBtn').onclick = () => {
+    xAxisLabel = document.getElementById('xAxisLabel').value || "X";
+    yAxisLabel = document.getElementById('yAxisLabel').value || "Y";
+    updateLiveResults();
+    updateStatus(`Chart axis labels updated to ${xAxisLabel} and ${yAxisLabel}`);
+  };
+  
   // Modified createNewCurve function with color selection
   function createNewCurve() {
     if (currentData.length > 0) {
@@ -122,18 +133,14 @@ function loadImageFromFile(file) {
         return;
       }
       
-      // Add color picker dialog for the new curve
-      const colorInput = prompt("Enter a color for the curve (hex code or color name):", getRandomColor());
-      if (colorInput === null) {
-        dataSets.pop();
-        currentData = dataSets[dataSets.length - 1].data;
-        return;
-      }
-      
       curveCounter++;
       currentCurveName = curveNameInput.trim() || `Curve ${curveCounter}`;
       document.getElementById('curveName').value = currentCurveName;
-      currentDatasetColor = colorInput || getRandomColor();
+      
+      // Set a new random color for the next curve
+      currentDatasetColor = getRandomColor();
+      document.getElementById('curveColorPicker').value = currentDatasetColor;
+      
       updateStatus(`Started new curve: ${currentCurveName} in dataset: ${currentDatasetName}`);
       updateCurveIndicator();
       redrawCanvas();
@@ -141,19 +148,14 @@ function loadImageFromFile(file) {
     } else {
       currentDatasetName = document.getElementById('datasetName').value;
       currentCurveName = document.getElementById('curveName').value;
-      
-      // Allow color selection even when no points yet
-      const colorInput = prompt("Enter a color for the curve (hex code or color name):", currentDatasetColor);
-      if (colorInput !== null) {
-        currentDatasetColor = colorInput;
-      }
+      currentDatasetColor = document.getElementById('curveColorPicker').value;
       
       updateCurveIndicator();
       updateStatus(`Ready to digitize: ${currentCurveName} in dataset: ${currentDatasetName}`);
     }
   }
   
-  // Restoring the functionality of New Curve, Reset Current, and Export CSV buttons
+  // Button event handlers
   document.getElementById('newCurveBtn').onclick = createNewCurve;
   document.getElementById('resetBtn').onclick = () => {
     currentData = [];
@@ -162,31 +164,7 @@ function loadImageFromFile(file) {
     updateCurveIndicator();
     updateLiveResults();
   };
-  //document.getElementById('exportCSVBtn').onclick = exportCSV;
   document.getElementById('exportJSONBtn').onclick = exportJSON;
-  
-  document.getElementById('datasetName').addEventListener('input', function() {
-    currentDatasetName = this.value;
-    updateCurveIndicator();
-  });
-  document.getElementById('curveName').addEventListener('input', function() {
-    currentCurveName = this.value;
-    updateCurveIndicator();
-  });
-  
-  // Helper Functions for UI Updates
-  function updateStatus(message) {
-    document.getElementById('status').textContent = message;
-  }
-  
-  function updateCurveIndicator() {
-    document.getElementById('datasetNameDisplay').textContent = currentDatasetName;
-    document.getElementById('curveNameDisplay').textContent = currentCurveName;
-    document.getElementById('curveColorDisplay').style.backgroundColor = currentDatasetColor;
-    document.getElementById('pointCountDisplay').textContent = currentData.length;
-  }
-
-   // Add this to ui.js
   
   // Load JSON button and file input handler
   document.getElementById('loadJSONBtn').onclick = () => {
@@ -209,3 +187,24 @@ function loadImageFromFile(file) {
       reader.readAsText(file);
     }
   });
+  
+  document.getElementById('datasetName').addEventListener('input', function() {
+    currentDatasetName = this.value;
+    updateCurveIndicator();
+  });
+  document.getElementById('curveName').addEventListener('input', function() {
+    currentCurveName = this.value;
+    updateCurveIndicator();
+  });
+  
+  // Helper Functions for UI Updates
+  function updateStatus(message) {
+    document.getElementById('status').textContent = message;
+  }
+  
+  function updateCurveIndicator() {
+    document.getElementById('datasetNameDisplay').textContent = currentDatasetName;
+    document.getElementById('curveNameDisplay').textContent = currentCurveName;
+    document.getElementById('curveColorDisplay').style.backgroundColor = currentDatasetColor;
+    document.getElementById('pointCountDisplay').textContent = currentData.length;
+  }

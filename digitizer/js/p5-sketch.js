@@ -10,6 +10,8 @@ let currentCurveName = "Curve 1";
 let currentDatasetColor = "#FFA500";
 let datasetCounter = 1;
 let curveCounter = 1;
+let xAxisLabel = "X";
+let yAxisLabel = "Y";
 
 // Zoom & pan variables
 let zoomLevel = 1;
@@ -274,4 +276,13 @@ function resetView() {
     offsetY = 0;
   }
   redrawCanvas();
+}
+
+function getRandomColor() {
+  const letters = '0123456789ABCDEF';
+  let color = '#';
+  for (let i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
 }
